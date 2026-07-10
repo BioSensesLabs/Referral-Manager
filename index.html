@@ -4,56 +4,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lab Price Management System</title>
-    <!-- Tailwind CSS for UI -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SheetJS for Excel Parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen font-sans pb-12">
 
     <div class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 border-b pb-5">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8 border-b pb-5 gap-4">
             <div>
                 <h1 class="text-3xl font-bold text-gray-800">Lab Price Manager</h1>
-                <p class="text-gray-500 text-sm mt-1">Manage tests and entity pricing efficiently.</p>
+                <p class="text-gray-500 text-sm mt-1">Manage tests and entity pricing efficiently (Auto-Saved Data).</p>
             </div>
-            <!-- Add Future Entities -->
-            <div class="mt-4 md:mt-0 flex gap-2 bg-white p-2 rounded-lg shadow-sm border">
+            <div class="flex flex-wrap gap-2 bg-white p-2 rounded-lg shadow-sm border items-center">
                 <input id="newEntityInput" type="text" placeholder="New Entity Name..." class="border rounded px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500">
                 <button onclick="addNewEntity()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-1.5 rounded transition">
                     + Add Entity
+                </button>
+                <button onclick="clearSystemDatabase()" class="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold px-3 py-1.5 rounded transition border border-red-200 ml-4">
+                    ⚠ Reset System
                 </button>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Left Side: Controls & Entry -->
             <div class="space-y-6">
-                <!-- 1. Excel Upload Card -->
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h2 class="text-lg font-semibold text-gray-700 mb-3">1. Upload Base Excel</h2>
+                <div id="uploadSection" class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-2">1. Initialize Base Excel</h2>
+                    <p class="text-xs text-gray-400 mb-3">You only need to do this once. This loads the master list and populates Medlab.</p>
                     <label class="block">
                         <span class="sr-only">Choose Excel File</span>
-                        <input type="file" id="excelFile" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-55 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+                        <input type="file" id="excelFile" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
                     </label>
-                    <p class="text-xs text-gray-400 mt-2">Expects columns: "Test Name" & "Price" (maps to Medlab).</p>
                 </div>
 
-                <!-- 2. Test Dropdown & Multi-Entity Price Entry Form -->
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h2 class="text-lg font-semibold text-gray-700 mb-4">2. Pricing Entry / Update</h2>
                     <form id="priceForm" onsubmit="saveFormPrice(event)">
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-600 mb-1">Select Test</label>
-                            <select id="testDropdown" class="w-full border rounded-lg p-2 bg-gray-55 outline-none focus:ring-2 focus:ring-blue-500" required>
+                            <select id="testDropdown" class="w-full border rounded-lg p-2 bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" required>
                                 <option value="">-- Choose a test --</option>
                             </select>
                         </div>
                         
                         <div id="dynamicFormPrices" class="space-y-3 max-h-60 overflow-y-auto pr-1 mb-4">
-                            <!-- Generated Dynamically by JS -->
-                        </div>
+                            </div>
 
                         <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 rounded-lg transition shadow-sm">
                             Save Prices
@@ -62,36 +57,30 @@
                 </div>
             </div>
 
-            <!-- Right Side: Live View Table -->
             <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
                 <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-3">
                     <h2 class="text-xl font-bold text-gray-800">Complete Pricing Database</h2>
-                    <!-- Search Bar -->
                     <input id="searchInput" type="text" oninput="renderTable()" placeholder="🔍 Search test names..." class="w-full sm:w-64 border rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
-                <!-- Responsive Table View -->
                 <div class="overflow-x-auto border rounded-lg flex-grow">
                     <table class="min-w-full divide-y divide-gray-200 text-sm text-left">
                         <thead id="tableHeader" class="bg-gray-50 text-gray-700 font-semibold uppercase text-xs tracking-wider">
-                            <!-- Generated Dynamically -->
-                        </thead>
+                            </thead>
                         <tbody id="tableBody" class="divide-y divide-gray-200 text-gray-600">
-                            <!-- Generated Dynamically -->
-                        </tbody>
+                            </tbody>
                     </table>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- JavaScript Application Logic -->
     <script>
-        // System State
+        // Default Configuration
         let entities = ['Medlab', 'MedScale', 'GLab', 'Alpha', 'Sultan', 'Smart'];
-        let testDatabase = {}; // Format: { "Test A": { "Medlab": 50, "MedScale": 0 ... } }
+        let testDatabase = {}; 
 
-        // Load data on startup if it exists in browser storage
+        // Execute system boot up loading sequences
         window.onload = function() {
             if(localStorage.getItem('lab_entities')) {
                 entities = JSON.parse(localStorage.getItem('lab_entities'));
@@ -99,6 +88,7 @@
             if(localStorage.getItem('lab_database')) {
                 testDatabase = JSON.parse(localStorage.getItem('lab_database'));
             }
+            
             initSystem();
         };
 
@@ -108,49 +98,86 @@
         }
 
         function initSystem() {
+            // Manage upload module visibility container state depending on data footprint status
+            const uploadSection = document.getElementById('uploadSection');
+            if (Object.keys(testDatabase).length > 0) {
+                uploadSection.className = "bg-gray-100 p-4 rounded-xl border border-dashed text-gray-400 opacity-60";
+                uploadSection.innerHTML = `<p class="text-sm font-medium text-center">✓ Data Database Initialized and Saved Offline.</p>`;
+            } else {
+                uploadSection.className = "bg-white p-6 rounded-xl shadow-sm border border-gray-100";
+                uploadSection.innerHTML = `
+                    <h2 class="text-lg font-semibold text-gray-700 mb-2">1. Initialize Base Excel</h2>
+                    <p class="text-xs text-gray-400 mb-3">You only need to do this once. This loads the master list and populates Medlab.</p>
+                    <label class="block">
+                        <input type="file" id="excelFile" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+                    </label>
+                `;
+                bindExcelUploadListener();
+            }
+
             renderDropdown();
             renderFormFields();
             renderTable();
         }
 
-        // Excel File Parser
-        document.getElementById('excelFile').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+        function bindExcelUploadListener() {
+            const fileInput = document.getElementById('excelFile');
+            if(!fileInput) return;
+            
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                const data = evt.target.result;
-                const workbook = XLSX.read(data, { type: 'binary' });
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
-                
-                // Parse to JSON array
-                const jsonRows = XLSX.utils.sheet_to_json(worksheet);
-                
-                jsonRows.forEach(row => {
-                    // Normalize standard column naming quirks
-                    const testName = row['Test Name'] || row['test name'] || row['TestName'];
-                    const basePrice = parseFloat(row['Price'] || row['price'] || 0);
-
-                    if (testName) {
-                        if (!testDatabase[testName]) {
-                            testDatabase[testName] = {};
-                            entities.forEach(ent => testDatabase[testName][ent] = 0);
-                        }
-                        // Set file price exclusively under Medlab as instructed
-                        testDatabase[testName]['Medlab'] = basePrice;
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    const data = evt.target.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet);
+                    
+                    if (jsonRows.length === 0) {
+                        alert("The uploaded Excel file seems to be empty.");
+                        return;
                     }
-                });
 
-                syncStorage();
-                initSystem();
-                alert('Excel File Loaded Successfully!');
-            };
-            reader.readAsBinaryString(file);
-        });
+                    jsonRows.forEach((row) => {
+                        let testName = "";
+                        let basePrice = 0;
 
-        // Add Future Entities Dynamically
+                        Object.keys(row).forEach(key => {
+                            const cleanKey = key.trim().toLowerCase();
+                            if (cleanKey.includes('test') || cleanKey.includes('name')) {
+                                testName = String(row[key]).trim();
+                            }
+                            if (cleanKey.includes('price') || cleanKey.includes('rate') || cleanKey.includes('cost')) {
+                                basePrice = parseFloat(row[key]) || 0;
+                            }
+                        });
+
+                        if (!testName) {
+                            const keys = Object.keys(row);
+                            if (keys[0]) testName = String(row[keys[0]]).trim();
+                            if (keys[1]) basePrice = parseFloat(row[keys[1]]) || 0;
+                        }
+
+                        if (testName && testName !== "undefined" && testName !== "") {
+                            if (!testDatabase[testName]) {
+                                testDatabase[testName] = {};
+                                entities.forEach(ent => testDatabase[testName][ent] = 0);
+                            }
+                            testDatabase[testName]['Medlab'] = basePrice;
+                        }
+                    });
+
+                    syncStorage();
+                    initSystem();
+                    alert('Excel File Loaded and Medlab Prices Saved Locally!');
+                };
+                reader.readAsBinaryString(file);
+            });
+        }
+
         function addNewEntity() {
             const input = document.getElementById('newEntityInput');
             const name = input.value.trim();
@@ -162,7 +189,6 @@
             }
 
             entities.push(name);
-            // Append the new entity to existing tests in db
             Object.keys(testDatabase).forEach(test => {
                 testDatabase[test][name] = 0;
             });
@@ -172,7 +198,6 @@
             initSystem();
         }
 
-        // Render Dropdown options
         function renderDropdown() {
             const dropdown = document.getElementById('testDropdown');
             dropdown.innerHTML = '<option value="">-- Choose a test --</option>';
@@ -185,7 +210,6 @@
             });
         }
 
-        // Generate form fields for input depending on active entities
         function renderFormFields() {
             const container = document.getElementById('dynamicFormPrices');
             container.innerHTML = '';
@@ -200,7 +224,6 @@
             });
         }
 
-        // Autofill form pricing when selecting a dropdown item
         document.getElementById('testDropdown').addEventListener('change', function(e) {
             const testName = e.target.value;
             if(!testName) return;
@@ -210,7 +233,6 @@
             });
         });
 
-        // Save entry from Form
         function saveFormPrice(e) {
             e.preventDefault();
             const testName = document.getElementById('testDropdown').value;
@@ -224,16 +246,14 @@
             syncStorage();
             renderTable();
             document.getElementById('priceForm').reset();
-            alert('Prices updated successfully!');
+            alert(`Prices updated for ${testName}!`);
         }
 
-        // Render Layout and Complete Matrix Table View
         function renderTable() {
             const header = document.getElementById('tableHeader');
             const body = document.getElementById('tableBody');
             const searchStr = document.getElementById('searchInput').value.toLowerCase();
 
-            // Render dynamic headers
             let headerHTML = `<tr><th class="px-4 py-3">Test Name</th>`;
             entities.forEach(ent => {
                 headerHTML += `<th class="px-4 py-3">${ent}</th>`;
@@ -241,12 +261,11 @@
             headerHTML += `<th class="px-4 py-3 text-right">Actions</th></tr>`;
             header.innerHTML = headerHTML;
 
-            // Render dynamic rows
             let bodyHTML = '';
             const filteredTests = Object.keys(testDatabase).filter(test => test.toLowerCase().includes(searchStr)).sort();
 
             if(filteredTests.length === 0) {
-                bodyHTML = `<tr><td colspan="${entities.length + 2}" class="text-center p-8 text-gray-400">No matching records found.</td></tr>`;
+                bodyHTML = `<tr><td colspan="${entities.length + 2}" class="text-center p-8 text-gray-400">No records found. Upload an Excel or clear systems to rerun.</td></tr>`;
             } else {
                 filteredTests.forEach(test => {
                     bodyHTML += `<tr>`;
@@ -254,7 +273,7 @@
                     
                     entities.forEach(ent => {
                         const price = testDatabase[test][ent] !== undefined ? testDatabase[test][ent] : 0;
-                        bodyHTML += `<td class="px-4 py-3 font-mono">${price.toFixed(2)}</td>`;
+                        bodyHTML += `<td class="px-4 py-3 font-mono">${Number(price).toFixed(2)}</td>`;
                     });
 
                     bodyHTML += `
@@ -269,12 +288,10 @@
             body.innerHTML = bodyHTML;
         }
 
-        // Action Handlers
         function editInline(testName) {
             document.getElementById('testDropdown').value = testName;
-            // trigger change event
             document.getElementById('testDropdown').dispatchEvent(new Event('change'));
-            document.getElementById('testDropdown').scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('priceForm').scrollIntoView({ behavior: 'smooth' });
         }
 
         function deleteRow(testName) {
@@ -285,7 +302,15 @@
             }
         }
 
-        // Helper function to escape special string chars
+        function clearSystemDatabase() {
+            if (confirm("🚨 WARNING: Are you sure you want to delete the entire database? You will lose all entries and custom entity edits!")) {
+                localStorage.removeItem('lab_database');
+                testDatabase = {};
+                syncStorage();
+                initSystem();
+            }
+        }
+
         function escapeHtml(str) {
             return str.replace(/'/g, "\\'").replace(/"/g, "&quot;");
         }
