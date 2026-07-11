@@ -61,7 +61,6 @@
         }
     </script>
     <style>
-        /* Modern aesthetic styling for custom scrollbars within our tracking panel */
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -111,7 +110,7 @@
             </div>
             <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
                 <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Managed Entities</p>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Managed Labs</p>
                     <h3 id="statEntities" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
                 </div>
                 <div class="bg-emerald-50 text-emerald-600 p-3 rounded-lg font-bold text-lg">🏢</div>
@@ -135,9 +134,9 @@
                     </div>
                     <div id="uploadSection" class="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5"></div>
                     <div class="flex gap-2">
-                        <input id="newEntityInput" type="text" placeholder="Add custom channel name..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
+                        <input id="newEntityInput" type="text" placeholder="Add a new lab..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
                         <button onclick="addNewEntity()" class="bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shrink-0 shadow-sm">
-                            + Add Entity
+                            + Add New Lab
                         </button>
                     </div>
                 </div>
@@ -149,7 +148,7 @@
                             <p class="text-xs text-slate-400">Select an existing element or spawn custom text entries.</p>
                         </div>
                         <div class="inline-flex rounded-md shadow-sm bg-slate-100 p-0.5 border text-xs font-semibold">
-                            <button type="button" id="modeSelectBtn" onclick="toggleTestInputMode('select')" class="bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all">Select Existing</button>
+                            <button type="button" id="modeSelectBtn" onclick="toggleTestInputMode('select')" class="bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all">Select Existing Test</button>
                             <button type="button" id="modeCreateBtn" onclick="toggleTestInputMode('create')" class="text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all">+ Create New Test</button>
                         </div>
                     </div>
@@ -167,7 +166,7 @@
                         </div>
                         <div class="flex justify-end">
                             <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm px-6 py-2 rounded-lg transition shadow-md shadow-indigo-100">
-                                Apply Layout Changes
+                                Apply Referral Prices
                             </button>
                         </div>
                     </form>
@@ -179,12 +178,12 @@
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
             <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
                 <div>
-                    <h2 class="text-lg font-bold text-slate-900">Master Pricing Record Ledger</h2>
+                    <h2 class="text-lg font-bold text-slate-900">Master Referral and Pricing View</h2>
                     <p class="text-xs text-slate-400">Review structural rates matrices. Real-time updates active.</p>
                 </div>
                 <div class="flex gap-2 w-full sm:w-auto items-center justify-end">
                     <div class="relative w-full sm:w-72">
-                        <input id="searchInput" type="text" oninput="renderTable()" placeholder="🔍 Search test ledger keys..." class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                        <input id="searchInput" type="text" oninput="renderTable()" placeholder="🔍 search test..." class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
                     </div>
                     <button onclick="downloadExcelTable()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
                         📥 Download Excel
@@ -404,8 +403,7 @@
             if(!header || !body) return;
             const searchStr = document.getElementById('searchInput').value.toLowerCase();
 
-            // Set Header with fixed dimensional widths and sticky boundaries configuration models
-            let headerHTML = `<tr><th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Target Test Name Column</th>`;
+            let headerHTML = `<tr><th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Test Name</th>`;
             window.entities.forEach(ent => { 
                 headerHTML += `
                     <th class="px-2 py-3 w-28 text-slate-700 font-bold border-b bg-slate-50">
@@ -415,7 +413,7 @@
                         </div>
                     </th>`; 
             });
-            headerHTML += `<th class="px-3 py-3 w-36 text-center text-slate-700 font-bold sticky right-0 bg-slate-50 border-b z-20 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">Actions Matrix</th></tr>`;
+            headerHTML += `<th class="px-3 py-3 w-36 text-center text-slate-700 font-bold sticky right-0 bg-slate-50 border-b z-20 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">Actions</th></tr>`;
             header.innerHTML = headerHTML;
 
             body.innerHTML = '';
@@ -434,19 +432,34 @@
                     ? "bg-indigo-50/50 border-y-2 border-indigo-400 font-medium transition-colors" 
                     : "hover:bg-slate-50/80 transition-colors border-b border-slate-100 bg-white";
 
-                // Cell 1: Test name string layout display - STICKY LEFT
                 let rowHTML = `<td class="px-3 py-2 font-semibold text-slate-900 break-words sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">${test}</td>`;
                 
+                let pricesArr = [];
                 window.entities.forEach(ent => {
-                    const price = window.testDatabase[test][ent] !== undefined ? window.testDatabase[test][ent] : 0;
+                    const val = window.testDatabase[test][ent] !== undefined ? parseFloat(window.testDatabase[test][ent]) : 0;
+                    pricesArr.push(val);
+                });
+
+                let minVal = Math.min(...pricesArr);
+                let maxVal = Math.max(...pricesArr);
+                let allEqual = pricesArr.every(v => v === pricesArr[0]);
+
+                window.entities.forEach(ent => {
+                    const price = window.testDatabase[test][ent] !== undefined ? parseFloat(window.testDatabase[test][ent]) : 0;
+                    
+                    let cellBgClass = "";
+                    if (!allEqual && !isEditing) {
+                        if (price === minVal) cellBgClass = "bg-emerald-100 text-emerald-900 font-bold rounded-xs shadow-xs";
+                        else if (price === maxVal) cellBgClass = "bg-rose-100 text-rose-900 font-bold rounded-xs shadow-xs";
+                    }
+
                     rowHTML += isEditing 
                         ? `<td class="px-1.5 py-1.5"><input type="number" step="0.01" value="${price}" id="inline-edit-${ent}" class="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-xs font-mono font-bold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500"></td>`
-                        : `<td class="px-2 py-2 font-mono text-slate-600">${Number(price).toFixed(2)}</td>`;
+                        : `<td class="px-2 py-2 font-mono text-slate-600 transition-colors ${cellBgClass}">${Number(price).toFixed(2)}</td>`;
                 });
                 
                 tr.innerHTML = rowHTML;
 
-                // Create Operational Control Buttons - STICKY RIGHT
                 const tdActions = document.createElement('td');
                 tdActions.className = "px-3 py-2 text-center space-x-1.5 whitespace-nowrap sticky right-0 bg-inherit z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] border-l border-slate-100";
 
