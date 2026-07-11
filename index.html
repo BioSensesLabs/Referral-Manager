@@ -60,6 +60,23 @@
             });
         }
     </script>
+    <style>
+        /* Modern aesthetic styling for custom scrollbars within our tracking panel */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans pb-16 antialiased">
 
@@ -175,9 +192,9 @@
                 </div>
             </div>
 
-            <div class="overflow-x-auto max-h-[550px] overflow-y-auto">
-                <table class="min-w-full divide-y divide-slate-200 text-sm text-left table-fixed">
-                    <thead id="tableHeader" class="bg-slate-50 text-slate-600 font-bold uppercase text-xs tracking-wider sticky top-0 bg-white z-10 border-b border-slate-200 shadow-sm"></thead>
+            <div class="overflow-x-auto max-h-[550px] overflow-y-auto custom-scrollbar relative">
+                <table class="min-w-full divide-y divide-slate-200 text-xs text-left table-fixed border-collapse">
+                    <thead id="tableHeader" class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wider sticky top-0 bg-white z-30 border-b border-slate-200 shadow-sm"></thead>
                     <tbody id="tableBody" class="divide-y divide-slate-100 text-slate-600"></tbody>
                 </table>
             </div>
@@ -312,19 +329,14 @@
             window.syncCloudStorage();
         }
 
-        // Operational Entity Deletion System Function Execution
         window.deleteOperationalEntity = function(entityName) {
             if (confirm(`🚨 WARNING: Delete the entity column "${entityName}"? This will drop its stored prices permanently.`)) {
-                // Remove from core listing configuration array
                 window.entities = window.entities.filter(ent => ent !== entityName);
-                
-                // Clear node from each specific dictionary entry structural layout mapping
                 Object.keys(window.testDatabase).forEach(testKey => {
                     if (window.testDatabase[testKey][entityName] !== undefined) {
                         delete window.testDatabase[testKey][entityName];
                     }
                 });
-                
                 window.syncCloudStorage();
             }
         }
@@ -392,18 +404,18 @@
             if(!header || !body) return;
             const searchStr = document.getElementById('searchInput').value.toLowerCase();
 
-            // Set Header with delete configuration mappings
-            let headerHTML = `<tr><th class="px-6 py-3.5 w-1/3 text-slate-700 font-bold">Target Test Name Column</th>`;
+            // Set Header with fixed dimensional widths and sticky boundaries configuration models
+            let headerHTML = `<tr><th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Target Test Name Column</th>`;
             window.entities.forEach(ent => { 
                 headerHTML += `
-                    <th class="px-4 py-3.5 text-slate-700 font-bold group">
-                        <div class="flex items-center gap-1.5 justify-between">
-                            <span>${ent}</span>
-                            <button onclick="window.deleteOperationalEntity('${ent}')" class="text-slate-300 hover:text-rose-600 font-normal normal-case text-[10px] transition-colors p-0.5 rounded" title="Delete Entity">❌</button>
+                    <th class="px-2 py-3 w-28 text-slate-700 font-bold border-b bg-slate-50">
+                        <div class="flex items-center gap-1 justify-between">
+                            <span class="truncate" title="${ent}">${ent}</span>
+                            <button onclick="window.deleteOperationalEntity('${ent}')" class="text-slate-300 hover:text-rose-600 text-[9px] p-0.5 rounded transition-colors" title="Delete Entity">❌</button>
                         </div>
                     </th>`; 
             });
-            headerHTML += `<th class="px-6 py-3.5 w-44 text-center text-slate-700 font-bold text-right">Actions Matrix</th></tr>`;
+            headerHTML += `<th class="px-3 py-3 w-36 text-center text-slate-700 font-bold sticky right-0 bg-slate-50 border-b z-20 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">Actions Matrix</th></tr>`;
             header.innerHTML = headerHTML;
 
             body.innerHTML = '';
@@ -417,40 +429,47 @@
             filteredTests.forEach(test => {
                 const tr = document.createElement('tr');
                 const isEditing = (window.currentEditingRow === test);
-                tr.className = isEditing ? "bg-indigo-50/40 border-y-2 border-indigo-500 font-medium z-10 relative" : "hover:bg-slate-50/80 transition-colors border-b border-slate-100";
+                
+                tr.className = isEditing 
+                    ? "bg-indigo-50/50 border-y-2 border-indigo-400 font-medium transition-colors" 
+                    : "hover:bg-slate-50/80 transition-colors border-b border-slate-100 bg-white";
 
-                let rowHTML = `<td class="px-6 py-3.5 font-semibold text-slate-900 break-words">${test}</td>`;
+                // Cell 1: Test name string layout display - STICKY LEFT
+                let rowHTML = `<td class="px-3 py-2 font-semibold text-slate-900 break-words sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">${test}</td>`;
+                
                 window.entities.forEach(ent => {
                     const price = window.testDatabase[test][ent] !== undefined ? window.testDatabase[test][ent] : 0;
                     rowHTML += isEditing 
-                        ? `<td class="px-2 py-2"><input type="number" step="0.01" value="${price}" id="inline-edit-${ent}" class="w-full border-2 border-indigo-400 rounded-lg p-1.5 text-xs font-mono font-bold bg-white text-slate-900 shadow-inner"></td>`
-                        : `<td class="px-4 py-3.5 font-mono text-slate-600">${Number(price).toFixed(2)}</td>`;
+                        ? `<td class="px-1.5 py-1.5"><input type="number" step="0.01" value="${price}" id="inline-edit-${ent}" class="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-xs font-mono font-bold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500"></td>`
+                        : `<td class="px-2 py-2 font-mono text-slate-600">${Number(price).toFixed(2)}</td>`;
                 });
+                
                 tr.innerHTML = rowHTML;
 
+                // Create Operational Control Buttons - STICKY RIGHT
                 const tdActions = document.createElement('td');
-                tdActions.className = "px-6 py-3.5 text-right space-x-2 whitespace-nowrap";
+                tdActions.className = "px-3 py-2 text-center space-x-1.5 whitespace-nowrap sticky right-0 bg-inherit z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] border-l border-slate-100";
 
                 if (isEditing) {
                     const saveBtn = document.createElement('button');
-                    saveBtn.className = "bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 text-xs font-bold rounded-lg shadow-sm transition-colors";
+                    saveBtn.className = "bg-indigo-600 text-white hover:bg-indigo-700 px-2 py-1 text-[10px] font-bold rounded shadow-sm transition-colors";
                     saveBtn.innerText = "Save"; saveBtn.dataset.testName = test;
                     saveBtn.addEventListener('click', function() { saveInlineRowChanges(this.dataset.testName); });
 
                     const cancelBtn = document.createElement('button');
-                    cancelBtn.className = "bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors";
+                    cancelBtn.className = "bg-slate-200 text-slate-700 hover:bg-slate-300 px-2 py-1 text-[10px] font-bold rounded transition-colors";
                     cancelBtn.innerText = "Cancel";
                     cancelBtn.addEventListener('click', function() { window.currentEditingRow = null; renderTable(); });
 
                     tdActions.appendChild(saveBtn); tdActions.appendChild(cancelBtn);
                 } else {
                     const editBtn = document.createElement('button');
-                    editBtn.className = "text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 px-2.5 py-1 rounded text-xs font-bold transition-all";
+                    editBtn.className = "text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 px-2 py-0.5 rounded text-[11px] font-bold transition-all";
                     editBtn.innerText = "Edit"; editBtn.dataset.testName = test;
                     editBtn.addEventListener('click', function() { window.currentEditingRow = this.dataset.testName; renderTable(); });
 
                     const deleteBtn = document.createElement('button');
-                    deleteBtn.className = "text-rose-600 hover:text-rose-900 hover:bg-rose-50 border border-transparent hover:border-rose-100 px-2.5 py-1 rounded text-xs font-bold transition-all";
+                    deleteBtn.className = "text-rose-600 hover:text-rose-900 hover:bg-rose-50 border border-transparent hover:border-rose-100 px-2 py-0.5 rounded text-[11px] font-bold transition-all";
                     deleteBtn.innerText = "Delete"; deleteBtn.dataset.testName = test;
                     deleteBtn.addEventListener('click', function() { handleDeleteClick(this.dataset.testName); });
 
