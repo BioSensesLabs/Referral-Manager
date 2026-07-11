@@ -218,6 +218,16 @@
             return keyStr.replace(/[\.\#\$\/\[\]]/g, "-");
         }
 
+        // Safety verification logic preventing spaces or reserved keys in key arrays
+        function validateNameChange(oldName, newName) {
+            if (!newName || newName.trim() === "") return { valid: false, msg: "Test name cannot be empty." };
+            let sanitized = sanitizeCloudKey(newName.trim());
+            if (sanitized !== oldName && window.testDatabase[sanitized]) {
+                return { valid: false, msg: "A test with this name already exists." };
+            }
+            return { valid: true, sanitized: sanitized };
+        }
+
         function initSystem() {
             const uploadSection = document.getElementById('uploadSection');
             if(uploadSection) {
@@ -432,7 +442,16 @@
                     ? "bg-indigo-50/50 border-y-2 border-indigo-400 font-medium transition-colors" 
                     : "hover:bg-slate-50/80 transition-colors border-b border-slate-100 bg-white";
 
-                let rowHTML = `<td class="px-3 py-2 font-semibold text-slate-900 break-words sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">${test}</td>`;
+                // Cell 1: Conditional text field modification allowing input when inline modification status is active
+                let rowHTML = "";
+                if (isEditing) {
+                    rowHTML += `
+                    <td class="px-2 py-1.5 sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">
+                        <input type="text" value="${test}" id="inline-edit-testname" class="w-full border border-indigo-400 rounded px-2 py-1 text-xs font-semibold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500">
+                    </td>`;
+                } else {
+                    rowHTML += `<td class="px-3 py-2 font-semibold text-slate-900 break-words sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">${test}</td>`;
+                }
                 
                 let pricesArr = [];
                 window.entities.forEach(ent => {
@@ -466,8 +485,8 @@
                 if (isEditing) {
                     const saveBtn = document.createElement('button');
                     saveBtn.className = "bg-indigo-600 text-white hover:bg-indigo-700 px-2 py-1 text-[10px] font-bold rounded shadow-sm transition-colors";
-                    saveBtn.innerText = "Save"; saveBtn.dataset.testName = test;
-                    saveBtn.addEventListener('click', function() { saveInlineRowChanges(this.dataset.testName); });
+                    saveBtn.innerText = "Save"; saveBtn.dataset.oldTestName = test;
+                    saveBtn.addEventListener('click', function() { saveInlineRowChanges(this.dataset.oldTestName); });
 
                     const cancelBtn = document.createElement('button');
                     cancelBtn.className = "bg-slate-200 text-slate-700 hover:bg-slate-300 px-2 py-1 text-[10px] font-bold rounded transition-colors";
@@ -492,11 +511,33 @@
             });
         }
 
-        function saveInlineRowChanges(testName) {
+        function saveInlineRowChanges(oldTestName) {
+            const nameField = document.getElementById('inline-edit-testname');
+            if(!nameField) return;
+
+            let check = validateNameChange(oldTestName, nameField.value);
+            if(!check.valid) {
+                alert(check.msg);
+                return;
+            }
+
+            let newSanitizedName = check.sanitized;
+            let targetRowData = {};
+
+            // Collect all current price variables inside row matrix
             window.entities.forEach(ent => {
                 const el = document.getElementById(`inline-edit-${ent}`);
-                if (el) window.testDatabase[testName][ent] = parseFloat(el.value) || 0;
+                if (el) targetRowData[ent] = parseFloat(el.value) || 0;
             });
+
+            // If the name actually changed, clear old registry block path key signatures
+            if(oldTestName !== newSanitizedName) {
+                delete window.testDatabase[oldTestName];
+            }
+
+            // Bind updated array structures
+            window.testDatabase[newSanitizedName] = targetRowData;
+            
             window.currentEditingRow = null;
             window.syncCloudStorage();
         }
