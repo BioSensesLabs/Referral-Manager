@@ -1,32 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioSenses Cloud Price Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-BioSenses Portal
-Real-Time Sync Infrastructure
-⚠ Reset Cloud Database
-Connecting to cloud synchronization engine...
-Total Active Tests
-0
-🧪
-Managed Entities
-0
-🏢
-Network Cluster Status
-🟢 Connected
-☁
-System Provisioning
-Initialize baseline matrix spreadsheets or add operational lab entities.
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-+ Add Entity
-Test Pricing Manager Matrix
-Select an existing element or spawn custom text entries.
-Select Existing + Create New Test
-Target Test
-                                    -- Choose a test --
-                                
+        // BioSenses Live Production Cloud Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
+            authDomain: "lab-referral-pricing.firebaseapp.com",
+            databaseURL: "https://lab-referral-pricing-default-rtdb.firebaseio.com",
+            projectId: "lab-referral-pricing",
+            storageBucket: "lab-referral-pricing.firebasestorage.app",
+            messagingSenderId: "230114183546",
+            appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
+        };
 
-Apply Layout Changes
-Master Pricing Record Ledger
-Review structural rates matrices. Real-time updates active.
+        // Initialize Firebase Connection Nodes
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const dbRef = ref(db, 'lab_data');
 
-📥 Download Excel
+        // Global State System Variables
+        window.entities = ['Medlab', 'MedScale', 'GLab', 'Alpha', 'Sultan', 'Smart'];
+        window.testDatabase = {}; 
+        window.currentEditingRow = null; 
+        window.currentInputMode = 'select';
 
+        // Listen for Real-time changes across ALL connected devices
+        onValue(dbRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                if (data.entities) window.entities = data.entities;
+                window.testDatabase = data.database || {};
+            } else {
+                window.testDatabase = {};
+            }
+            logMessage("Cloud synced. Database loaded successfully across connected nodes.", "success");
+            initSystem();
+        }, (error) => {
+            logMessage("Cloud Read Database Failure: " + error.message, "error");
+        });
 
+        // Push updates up to Firebase Cloud Node
+        window.syncCloudStorage = function() {
+            set(dbRef, {
+                entities: window.entities,
+                database: window.testDatabase
+            }).then(() => {
+                logMessage("Cloud broadcast complete. Synchronization applied.", "success");
+            }).catch((err) => {
+                logMessage("Cloud Write Drop Failure: " + err.message, "error");
+            });
+        }
+    </script>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans pb-16 antialiased">
+
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-20 items-center">
+                <div class="flex items-center gap-4">
+                    <img src="logo-04.jpg" alt="BioSenses Logo" class="h-14 w-auto object-contain">
+                    <div class="border-l border-slate-200 pl-4">
+                        <h1 class="text-xl font-bold text-slate-900 tracking-tight">BioSenses Portal</h1>
+                        <p class="text-xs text-indigo-600 font-semibold tracking-wide uppercase">Real-Time Sync Infrastructure</p>
+                    </div>
+                </div>
+                <button onclick="clearSystemDatabase()" class="bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold px-4 py-2 rounded-lg border border-rose-200 transition-colors shadow-sm">
+                    ⚠ Reset Cloud Database
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 space-y-6">
+        
+        <div id="systemLog" class="p-4 rounded-xl text-xs font-mono shadow-sm border border-slate-200 transition-all duration-300 bg-amber-50 text-amber-800 border-amber-200">Connecting to cloud synchronization engine...</div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Active Tests</p>
+                    <h3 id="statTests" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+                </div>
+                <div class="bg-indigo-50 text-indigo-600 p-3 rounded-lg font-bold text-lg">🧪</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Managed Entities</p>
+                    <h3 id="statEntities" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+                </div>
+                <div class="bg-emerald-50 text-emerald-600 p-3 rounded-lg font-bold text-lg">🏢</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Network Cluster Status</p>
+                    <h3 class="text-lg font-bold text-emerald-600 mt-1 flex items-center gap-1">🟢 Connected</h3>
+                </div>
+                <div class="bg-amber-50 text-amber-600 p-3 rounded-lg font-bold text-lg">☁</div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+            <div class="flex flex-col md:flex-row gap-6 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                
+                <div class="flex-1 space-y-4">
+                    <div>
+                        <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">System Provisioning</h2>
+                        <p class="text-xs text-slate-400">Initialize baseline matrix spreadsheets or add operational lab entities.</p>
+                    </div>
+                    <div id="uploadSection" class="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5"></div>
+                    <div class="flex gap-2">
+                        <input id="newEntityInput" type="text" placeholder="Add custom channel name..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
+                        <button onclick="addNewEntity()" class="bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shrink-0 shadow-sm">
+                            + Add Entity
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-[2] md:pl-6 space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Test Pricing Manager Matrix</h2>
+                            <p class="text-xs text-slate-400">Select an existing element or spawn custom text entries.</p>
+                        </div>
+                        <div class="inline-flex rounded-md shadow-sm bg-slate-100 p-0.5 border text-xs font-semibold">
+                            <button type="button" id="modeSelectBtn" onclick="toggleTestInputMode('select')" class="bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all">Select Existing</button>
+                            <button type="button" id="modeCreateBtn" onclick="toggleTestInputMode('create')" class="text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all">+ Create New Test</button>
+                        </div>
+                    </div>
+
+                    <form id="priceForm" onsubmit="saveFormPrice(event)" class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                            <div class="sm:col-span-1" id="testSelectionWrapper">
+                                <label id="testInputLabel" class="block text-xs font-semibold text-slate-500 mb-1">Target Test</label>
+                                <select id="testDropdown" class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-slate-50/50 outline-none focus:ring-2 focus:ring-indigo-500" required>
+                                    <option value="">-- Choose a test --</option>
+                                </select>
+                                <input id="testTextInput" type="text" placeholder="Enter new test name..." class="hidden w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
+                            </div>
+                            <div id="dynamicFormPrices" class="sm:col-span-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-24 overflow-y-auto pr-1"></div>
+                        </div>
+                        <div class="flex justify-end">
+                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm px-6 py-2 rounded-lg transition shadow-md shadow-indigo-100">
+                                Apply Layout Changes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900">Master Pricing Record Ledger</h2>
+                    <p class="text-xs text-slate-400">Review structural rates matrices. Real-time updates active.</p>
+                </div>
+                <div class="flex gap-2 w-full sm:w-auto items-center justify-end">
+                    <div class="relative w-full sm:w-72">
+                        <input id="searchInput" type="text" oninput="renderTable()" placeholder="🔍 Search test ledger keys..." class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                    </div>
+                    <button onclick="downloadExcelTable()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
+                        📥 Download Excel
+                    </button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto max-h-[550px] overflow-y-auto">
+                <table class="min-w-full divide-y divide-slate-200 text-sm text-left table-fixed">
+                    <thead id="tableHeader" class="bg-slate-50 text-slate-600 font-bold uppercase text-xs tracking-wider sticky top-0 bg-white z-10 border-b border-slate-200 shadow-sm"></thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-100 text-slate-600"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function logMessage(msg, type) {
+            const box = document.getElementById('systemLog');
+            if(!box) return;
+            box.className = "p-4 rounded-xl text-xs font-mono shadow-sm border transition-all duration-300";
+            if (type === "error") {
+                box.classList.add('bg-rose-50', 'text-rose-700', 'border-rose-200');
+            } else {
+                box.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+            }
+            box.innerText = "[" + new Date().toLocaleTimeString() + "] " + msg;
+        }
+
+        function sanitizeCloudKey(keyStr) {
+            return keyStr.replace(/[\.\#\$\/\[\]]/g, "-");
+        }
+
+        // Upgraded version keeps upload box permanently persistent in layout
+        function initSystem() {
+            const uploadSection = document.getElementById('uploadSection');
+            if(uploadSection) {
+                let statusInfo = Object.keys(window.testDatabase).length > 0 
+                    ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${Object.keys(window.testDatabase).length} tests initialized)</span>`
+                    : '';
+                
+                uploadSection.className = "bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5";
+                uploadSection.innerHTML = `
+                    <label class="block flex flex-col cursor-pointer gap-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-slate-500 font-medium">Upload Master Sheet (.xlsx):</span>
+                            <input type="file" id="excelFile" accept=".xlsx, .xls" class="text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"/>
+                        </div>
+                        ${statusInfo}
+                    </label>
+                `;
+                bindExcelUploadListener();
+            }
+
+            document.getElementById('statTests').innerText = Object.keys(window.testDatabase).length.toLocaleString();
+            document.getElementById('statEntities').innerText = window.entities.length.toLocaleString();
+
+            renderDropdown();
+            renderFormFields();
+            renderTable();
+        }
+
+        function toggleTestInputMode(mode) {
+            window.currentInputMode = mode;
+            const dropEl = document.getElementById('testDropdown');
+            const textEl = document.getElementById('testTextInput');
+            const lblEl = document.getElementById('testInputLabel');
+            const btnSelect = document.getElementById('modeSelectBtn');
+            const btnCreate = document.getElementById('modeCreateBtn');
+
+            if (mode === 'create') {
+                dropEl.classList.add('hidden'); dropEl.removeAttribute('required');
+                textEl.classList.remove('hidden'); textEl.setAttribute('required', 'true');
+                lblEl.innerText = "New Test Name";
+                btnCreate.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
+                btnSelect.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
+            } else {
+                textEl.classList.add('hidden'); textEl.removeAttribute('required');
+                dropEl.classList.remove('hidden'); dropEl.setAttribute('required', 'true');
+                lblEl.innerText = "Target Test";
+                btnSelect.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
+                btnCreate.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
+            }
+            document.getElementById('priceForm').reset();
+            window.entities.forEach(ent => document.getElementById(`form-price-${ent}`).value = 0);
+        }
+
+        function bindExcelUploadListener() {
+            const fileInput = document.getElementById('excelFile');
+            if(!fileInput) return;
+            
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const data = evt.target.result;
+                        const workbook = XLSX.read(data, { type: 'binary' });
+                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        
+                        if (rawRows.length <= 1) return;
+
+                        for (let i = 1; i < rawRows.length; i++) {
+                            const row = rawRows[i];
+                            if (!row || row.length === 0) continue;
+                            let rawTestName = row[0] ? String(row[0]).trim() : "";
+                            let basePrice = row[1] ? parseFloat(row[1]) : 0;
+
+                            if (rawTestName && rawTestName !== "undefined" && rawTestName !== "") {
+                                let testName = sanitizeCloudKey(rawTestName);
+
+                                if (!window.testDatabase[testName]) {
+                                    window.testDatabase[testName] = {};
+                                    window.entities.forEach(ent => window.testDatabase[testName][ent] = 0);
+                                }
+                                window.testDatabase[testName]['Medlab'] = isNaN(basePrice) ? 0 : basePrice;
+                            }
+                        }
+                        window.syncCloudStorage();
+                    } catch (parseError) {
+                        logMessage("Fail compilation spreadsheet upload parsing: " + parseError.message, "error");
+                    }
+                };
+                reader.readAsBinaryString(file);
+            });
+        }
+
+        function addNewEntity() {
+            const input = document.getElementById('newEntityInput');
+            let rawName = input.value.trim();
+            if(!rawName) return;
+
+            let name = sanitizeCloudKey(rawName);
+            if(window.entities.includes(name)) return;
+
+            window.entities.push(name);
+            Object.keys(window.testDatabase).forEach(test => { window.testDatabase[test][name] = 0; });
+            input.value = '';
+            window.syncCloudStorage();
+        }
+
+        function renderDropdown() {
+            const dropdown = document.getElementById('testDropdown');
+            if(!dropdown) return;
+            dropdown.innerHTML = '<option value="">-- Choose a test --</option>';
+            Object.keys(window.testDatabase).sort().forEach(test => {
+                const opt = document.createElement('option'); opt.value = test; opt.textContent = test;
+                dropdown.appendChild(opt);
+            });
+        }
+
+        function renderFormFields() {
+            const container = document.getElementById('dynamicFormPrices');
+            if(!container) return;
+            container.innerHTML = '';
+            window.entities.forEach(ent => {
+                container.innerHTML += `
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-tight mb-0.5">${ent}</label>
+                        <input type="number" step="0.01" id="form-price-${ent}" value="0" class="w-full border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-mono bg-white">
+                    </div>`;
+            });
+        }
+
+        document.body.addEventListener('change', function(e) {
+            if(e.target && e.target.id === 'testDropdown') {
+                const testName = e.target.value;
+                if(!testName || window.currentInputMode !== 'select') return;
+                window.entities.forEach(ent => {
+                    document.getElementById(`form-price-${ent}`).value = window.testDatabase[testName][ent] || 0;
+                });
+            }
+        });
+
+        function saveFormPrice(e) {
+            e.preventDefault();
+            let rawTestName = window.currentInputMode === 'create' 
+                ? document.getElementById('testTextInput').value.trim() 
+                : document.getElementById('testDropdown').value;
+
+            if(!rawTestName) return;
+            let testName = sanitizeCloudKey(rawTestName);
+
+            if (!window.testDatabase[testName]) {
+                window.testDatabase[testName] = {};
+                window.entities.forEach(ent => window.testDatabase[testName][ent] = 0);
+            }
+
+            window.entities.forEach(ent => {
+                window.testDatabase[testName][ent] = parseFloat(document.getElementById(`form-price-${ent}`).value) || 0;
+            });
+
+            window.syncCloudStorage();
+            document.getElementById('testTextInput').value = "";
+            document.getElementById('priceForm').reset();
+            window.entities.forEach(ent => document.getElementById(`form-price-${ent}`).value = 0);
+        }
+
+        function renderTable() {
+            const header = document.getElementById('tableHeader');
+            const body = document.getElementById('tableBody');
+            if(!header || !body) return;
+            const searchStr = document.getElementById('searchInput').value.toLowerCase();
+
+            let headerHTML = `<tr><th class="px-6 py-3.5 w-1/3 text-slate-700 font-bold">Target Test Name Column</th>`;
+            window.entities.forEach(ent => { headerHTML += `<th class="px-4 py-3.5 text-slate-700 font-bold">${ent}</th>`; });
+            headerHTML += `<th class="px-6 py-3.5 w-44 text-center text-slate-700 font-bold text-right">Actions Matrix</th></tr>`;
+            header.innerHTML = headerHTML;
+
+            body.innerHTML = '';
+            const filteredTests = Object.keys(window.testDatabase).filter(test => test.toLowerCase().includes(searchStr)).sort();
+
+            if(filteredTests.length === 0) {
+                body.innerHTML = `<tr><td colspan="${window.entities.length + 2}" class="text-center p-12 text-slate-400 font-medium">No records match current search parameters.</td></tr>`;
+                return;
+            }
+
+            filteredTests.forEach(test => {
+                const tr = document.createElement('tr');
+                const isEditing = (window.currentEditingRow === test);
+                tr.className = isEditing ? "bg-indigo-50/40 border-y-2 border-indigo-500 font-medium z-10 relative" : "hover:bg-slate-50/80 transition-colors border-b border-slate-100";
+
+                let rowHTML = `<td class="px-6 py-3.5 font-semibold text-slate-900 break-words">${test}</td>`;
+                window.entities.forEach(ent => {
+                    const price = window.testDatabase[test][ent] !== undefined ? window.testDatabase[test][ent] : 0;
+                    rowHTML += isEditing 
+                        ? `<td class="px-2 py-2"><input type="number" step="0.01" value="${price}" id="inline-edit-${ent}" class="w-full border-2 border-indigo-400 rounded-lg p-1.5 text-xs font-mono font-bold bg-white text-slate-900 shadow-inner"></td>`
+                        : `<td class="px-4 py-3.5 font-mono text-slate-600">${Number(price).toFixed(2)}</td>`;
+                });
+                tr.innerHTML = rowHTML;
+
+                const tdActions = document.createElement('td');
+                tdActions.className = "px-6 py-3.5 text-right space-x-2 whitespace-nowrap";
+
+                if (isEditing) {
+                    const saveBtn = document.createElement('button');
+                    saveBtn.className = "bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 text-xs font-bold rounded-lg shadow-sm transition-colors";
+                    saveBtn.innerText = "Save"; saveBtn.dataset.testName = test;
+                    saveBtn.addEventListener('click', function() { saveInlineRowChanges(this.dataset.testName); });
+
+                    const cancelBtn = document.createElement('button');
+                    cancelBtn.className = "bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors";
+                    cancelBtn.innerText = "Cancel";
+                    cancelBtn.addEventListener('click', function() { window.currentEditingRow = null; renderTable(); });
+
+                    tdActions.appendChild(saveBtn); tdActions.appendChild(cancelBtn);
+                } else {
+                    const editBtn = document.createElement('button');
+                    editBtn.className = "text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 px-2.5 py-1 rounded text-xs font-bold transition-all";
+                    editBtn.innerText = "Edit"; editBtn.dataset.testName = test;
+                    editBtn.addEventListener('click', function() { window.currentEditingRow = this.dataset.testName; renderTable(); });
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = "text-rose-600 hover:text-rose-900 hover:bg-rose-50 border border-transparent hover:border-rose-100 px-2.5 py-1 rounded text-xs font-bold transition-all";
+                    deleteBtn.innerText = "Delete"; deleteBtn.dataset.testName = test;
+                    deleteBtn.addEventListener('click', function() { handleDeleteClick(this.dataset.testName); });
+
+                    tdActions.appendChild(editBtn); tdActions.appendChild(deleteBtn);
+                }
+                tr.appendChild(tdActions); body.appendChild(tr);
+            });
+        }
+
+        function saveInlineRowChanges(testName) {
+            window.entities.forEach(ent => {
+                const el = document.getElementById(`inline-edit-${ent}`);
+                if (el) window.testDatabase[testName][ent] = parseFloat(el.value) || 0;
+            });
+            window.currentEditingRow = null;
+            window.syncCloudStorage();
+        }
+
+        function handleDeleteClick(testName) {
+            if(confirm(`Delete record signature configuration targets permanently for: "${testName}"?`)) {
+                delete window.testDatabase[testName];
+                if(window.currentEditingRow === testName) window.currentEditingRow = null;
+                window.syncCloudStorage();
+            }
+        }
+
+        function downloadExcelTable() {
+            if (Object.keys(window.testDatabase).length === 0) return;
+            const excelRows = [["Test Name", ...window.entities]];
+            Object.keys(window.testDatabase).sort().forEach(testName => {
+                const dataRow = [testName];
+                window.entities.forEach(ent => { dataRow.push(window.testDatabase[testName][ent] || 0); });
+                excelRows.push(dataRow);
+            });
+            const worksheet = XLSX.utils.aoa_to_sheet(excelRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Pricing Matrix");
+            XLSX.writeFile(workbook, `BioSenses_Pricing_Master_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+
+        function clearSystemDatabase() {
+            if (confirm("🚨 DESTUCTIVE CLEAR WARNING: Wipe the entire cloud database node clean completely?")) {
+                window.testDatabase = {};
+                window.entities = ['Medlab', 'MedScale', 'GLab', 'Alpha', 'Sultan', 'Smart'];
+                window.currentEditingRow = null;
+                window.syncCloudStorage();
+            }
+        }
+    </script>
+</body>
+</html>
