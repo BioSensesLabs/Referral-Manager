@@ -202,7 +202,6 @@
             return keyStr.replace(/[\.\#\$\/\[\]]/g, "-");
         }
 
-        // Upgraded version keeps upload box permanently persistent in layout
         function initSystem() {
             const uploadSection = document.getElementById('uploadSection');
             if(uploadSection) {
@@ -313,6 +312,23 @@
             window.syncCloudStorage();
         }
 
+        // Operational Entity Deletion System Function Execution
+        window.deleteOperationalEntity = function(entityName) {
+            if (confirm(`🚨 WARNING: Delete the entity column "${entityName}"? This will drop its stored prices permanently.`)) {
+                // Remove from core listing configuration array
+                window.entities = window.entities.filter(ent => ent !== entityName);
+                
+                // Clear node from each specific dictionary entry structural layout mapping
+                Object.keys(window.testDatabase).forEach(testKey => {
+                    if (window.testDatabase[testKey][entityName] !== undefined) {
+                        delete window.testDatabase[testKey][entityName];
+                    }
+                });
+                
+                window.syncCloudStorage();
+            }
+        }
+
         function renderDropdown() {
             const dropdown = document.getElementById('testDropdown');
             if(!dropdown) return;
@@ -376,8 +392,17 @@
             if(!header || !body) return;
             const searchStr = document.getElementById('searchInput').value.toLowerCase();
 
+            // Set Header with delete configuration mappings
             let headerHTML = `<tr><th class="px-6 py-3.5 w-1/3 text-slate-700 font-bold">Target Test Name Column</th>`;
-            window.entities.forEach(ent => { headerHTML += `<th class="px-4 py-3.5 text-slate-700 font-bold">${ent}</th>`; });
+            window.entities.forEach(ent => { 
+                headerHTML += `
+                    <th class="px-4 py-3.5 text-slate-700 font-bold group">
+                        <div class="flex items-center gap-1.5 justify-between">
+                            <span>${ent}</span>
+                            <button onclick="window.deleteOperationalEntity('${ent}')" class="text-slate-300 hover:text-rose-600 font-normal normal-case text-[10px] transition-colors p-0.5 rounded" title="Delete Entity">❌</button>
+                        </div>
+                    </th>`; 
+            });
             headerHTML += `<th class="px-6 py-3.5 w-44 text-center text-slate-700 font-bold text-right">Actions Matrix</th></tr>`;
             header.innerHTML = headerHTML;
 
