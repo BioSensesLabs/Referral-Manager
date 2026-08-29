@@ -5,19 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BioSenses Cloud Price Management System</title>
 
-    <!-- Tailwind CSS -->
+    <!-- Production Tailwind CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" />
     
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>">
 
-    <!-- XLSX Library -->
+    <!-- XLSX Spreadsheet Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
+        // Firebase Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
             authDomain: "lab-referral-pricing.firebaseapp.com",
@@ -28,10 +29,12 @@
             appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
         };
 
+        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        window.activeTab = 'out';
+        // Global Application State
+        window.activeTab = 'out'; // 'out' | 'in'
         window.dataLoaded = { out: false, in: false };
 
         window.stateData = {
@@ -49,6 +52,7 @@
             }
         };
 
+        // System Logger
         window.logMessage = function(msg, type) {
             const box = document.getElementById('systemLog');
             if (!box) return;
@@ -61,96 +65,37 @@
             box.innerText = "[" + new Date().toLocaleTimeString() + "] " + msg;
         };
 
+        // Key Sanitizer for Firebase Compatibility
         window.sanitizeCloudKey = function(keyStr) {
             if (!keyStr) return "";
             return String(keyStr).trim().replace(/[\.\#\$\/\[\]]/g, "-");
         };
 
-        const refOut = ref(db, 'lab_data/referral_out');
-        const refIn = ref(db, 'lab_data/referral_in');
-
-        // Robust Unwrapper: Recursively traverses Firebase objects to find actual test records
-        function extractDatabaseNode(raw) {
-            if (!raw || typeof raw !== 'object') return {};
+        // Data Unwrapper: Parses standard objects, database nodes, and push-key collections
+        function parseFirebaseNode(rawData) {
+            if (!rawData || typeof rawData !== 'object') return {};
             let cleanDb = {};
+            
+            let source = rawData.database ? rawData.database : rawData;
 
-            function traverse(node) {
-                if (!node || typeof node !== 'object') return;
+            Object.keys(source).forEach(key => {
+                if (key === 'entities') return;
+                let val = source[key];
 
-                Object.keys(node).forEach(k => {
-                    if (k === 'entities') return;
-                    const val = node[k];
+                if (val && typeof val === 'object') {
+                    // Check if test name is embedded inside child object or stored as the object key
+                    let realTestName = (val.testName && typeof val.testName === 'string') ? val.testName : key;
+                    cleanDb[window.sanitizeCloudKey(realTestName)] = val;
+                }
+            });
 
-                    // Check if node has a 'testName' property or if the child keys match known entity names
-                    if (val && typeof val === 'object') {
-                        let subKeys = Object.keys(val);
-                        let hasEntityMatch = subKeys.some(sk => window.stateData[window.activeTab].entities.includes(sk));
-                        
-                        if (val.testName && typeof val.testName === 'string') {
-                            cleanDb[window.sanitizeCloudKey(val.testName)] = val;
-                        } else if (hasEntityMatch) {
-                            cleanDb[window.sanitizeCloudKey(k)] = val;
-                        } else {
-                            traverse(val);
-                        }
-                    }
-                });
-            }
-
-            traverse(raw);
             return cleanDb;
         }
 
-        // Snapshot Listener: Referral Out
-        onValue(refOut, (snapshot) => {
-            const data = snapshot.val();
-            window.dataLoaded.out = true;
-
-            if (data) {
-                if (data.entities && Array.isArray(data.entities) && data.entities.length > 0) {
-                    window.stateData.out.entities = data.entities;
-                }
-                window.stateData.out.testDatabase = extractDatabaseNode(data);
-            } else {
-                window.stateData.out.testDatabase = {};
-            }
-            
-            if (window.activeTab === 'out') {
-                window.initSystem();
-            }
-            const count = Object.keys(window.stateData.out.testDatabase).length;
-            window.logMessage(`Referral Out synchronized. ${count} record(s) active.`, "success");
-        }, (error) => {
-            window.dataLoaded.out = true;
-            window.logMessage("Referral Out Error: " + error.message, "error");
-        });
-
-        // Snapshot Listener: Referral In
-        onValue(refIn, (snapshot) => {
-            const data = snapshot.val();
-            window.dataLoaded.in = true;
-
-            if (data) {
-                if (data.entities && Array.isArray(data.entities) && data.entities.length > 0) {
-                    window.stateData.in.entities = data.entities;
-                }
-                window.stateData.in.testDatabase = extractDatabaseNode(data);
-            } else {
-                window.stateData.in.testDatabase = {};
-            }
-
-            if (window.activeTab === 'in') {
-                window.initSystem();
-            }
-            const count = Object.keys(window.stateData.in.testDatabase).length;
-            window.logMessage(`Referral In synchronized. ${count} record(s) active.`, "success");
-        }, (error) => {
-            window.dataLoaded.in = true;
-            window.logMessage("Referral In Error: " + error.message, "error");
-        });
-
+        // Database Save Action
         window.syncCloudStorage = function() {
-            const currentRef = window.activeTab === 'out' ? refOut : refIn;
+            const targetPath = window.activeTab === 'out' ? 'lab_data/referral_out' : 'lab_data/referral_in';
+            const currentRef = ref(db, targetPath);
             const state = window.stateData[window.activeTab];
 
             set(currentRef, {
@@ -159,10 +104,11 @@
             }).then(() => {
                 window.logMessage(`Cloud updated for Referral ${window.activeTab.toUpperCase()}.`, "success");
             }).catch((err) => {
-                window.logMessage("Cloud Write Error: " + err.message, "error");
+                window.logMessage("Cloud Write Failure: " + err.message, "error");
             });
         };
 
+        // UI Tab Switcher
         window.switchTab = function(tab) {
             window.activeTab = tab;
             const btnOut = document.getElementById('tabBtnOut');
@@ -190,8 +136,8 @@
             if (uploadSection) {
                 let count = Object.keys(state.testDatabase).length;
                 let statusInfo = count > 0 
-                    ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${count} test records loaded)</span>`
-                    : '<span class="text-[10px] text-slate-400 block text-center font-medium mt-1">No tests found in active view.</span>';
+                    ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${count} records loaded)</span>`
+                    : '<span class="text-[10px] text-slate-400 block text-center font-medium mt-1">No active records in this view.</span>';
                 
                 uploadSection.className = "bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5";
                 uploadSection.innerHTML = `
@@ -304,7 +250,7 @@
         };
 
         window.deleteOperationalEntity = function(entityName) {
-            if (confirm(`Delete entity "${entityName}"?`)) {
+            if (confirm(`Delete entity column "${entityName}"?`)) {
                 const state = window.stateData[window.activeTab];
                 state.entities = state.entities.filter(ent => ent !== entityName);
                 Object.keys(state.testDatabase).forEach(testKey => {
@@ -317,7 +263,7 @@
         };
 
         window.clearSystemDatabase = function() {
-            if (confirm(`Reset all records for ${window.activeTab.toUpperCase()}?`)) {
+            if (confirm(`Reset all cloud entries for [Referral ${window.activeTab.toUpperCase()}]?`)) {
                 window.stateData[window.activeTab].testDatabase = {};
                 window.syncCloudStorage();
             }
@@ -544,15 +490,73 @@
             XLSX.writeFile(workbook, `BioSenses_Pricing_Master_${window.activeTab.toUpperCase()}_${new Date().toISOString().slice(0,10)}.xlsx`);
         };
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => window.initSystem());
-        } else {
+        // DOM Lifecycle Safeguard: Bind Firebase snapshot listeners only after DOM exists
+        document.addEventListener('DOMContentLoaded', () => {
             window.initSystem();
-        }
+
+            const refOut = ref(db, 'lab_data/referral_out');
+            const refIn = ref(db, 'lab_data/referral_in');
+
+            // Referral Out Listener
+            onValue(refOut, (snapshot) => {
+                window.dataLoaded.out = true;
+                const data = snapshot.val();
+
+                if (data) {
+                    if (data.entities && Array.isArray(data.entities) && data.entities.length > 0) {
+                        window.stateData.out.entities = data.entities;
+                    }
+                    window.stateData.out.testDatabase = parseFirebaseNode(data);
+                } else {
+                    window.stateData.out.testDatabase = {};
+                }
+                
+                if (window.activeTab === 'out') {
+                    window.initSystem();
+                }
+                const count = Object.keys(window.stateData.out.testDatabase).length;
+                window.logMessage(`Referral Out synchronized. ${count} record(s) active.`, "success");
+            }, (error) => {
+                window.dataLoaded.out = true;
+                window.logMessage("Referral Out Error: " + error.message, "error");
+            });
+
+            // Referral In Listener
+            onValue(refIn, (snapshot) => {
+                window.dataLoaded.in = true;
+                const data = snapshot.val();
+
+                if (data) {
+                    if (data.entities && Array.isArray(data.entities) && data.entities.length > 0) {
+                        window.stateData.in.entities = data.entities;
+                    }
+                    window.stateData.in.testDatabase = parseFirebaseNode(data);
+                } else {
+                    window.stateData.in.testDatabase = {};
+                }
+
+                if (window.activeTab === 'in') {
+                    window.initSystem();
+                }
+                const count = Object.keys(window.stateData.in.testDatabase).length;
+                window.logMessage(`Referral In synchronized. ${count} record(s) active.`, "success");
+            }, (error) => {
+                window.dataLoaded.in = true;
+                window.logMessage("Referral In Error: " + error.message, "error");
+            });
+        });
     </script>
+
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans pb-16 antialiased">
 
+    <!-- Top Navigation -->
     <nav class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-20 items-center">
@@ -572,6 +576,7 @@
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
 
+        <!-- Navigation Tabs -->
         <div class="flex border-b border-slate-200">
             <button id="tabBtnOut" onclick="window.switchTab('out')" class="py-3 px-6 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-2">
                 <span>📤 Referral Out</span>
@@ -581,8 +586,10 @@
             </button>
         </div>
         
+        <!-- System Console Log -->
         <div id="systemLog" class="p-4 rounded-xl text-xs font-mono shadow-sm border border-slate-200 bg-amber-50 text-amber-800 border-amber-200">Connecting to cloud synchronization engine...</div>
 
+        <!-- Dashboard Stat Cards -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
                 <div>
@@ -607,7 +614,9 @@
             </div>
         </div>
 
+        <!-- System Operations Header Section -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Data Administration Panel -->
             <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Data Administration</h2>
                 <div>
@@ -620,6 +629,7 @@
                 <div id="uploadSection"></div>
             </div>
 
+            <!-- Pricing Control Panel -->
             <div class="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <form id="priceForm" onsubmit="window.saveFormPrice(event)" class="space-y-4">
                     <div class="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -645,6 +655,7 @@
             </div>
         </div>
 
+        <!-- Master Data View Table -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
                 <h2 id="tableHeaderTitle" class="text-base font-bold text-slate-800">Master Referral (Out) View</h2>
@@ -654,7 +665,7 @@
                 </div>
             </div>
 
-            <div class="overflow-x-auto max-h-[600px]">
+            <div class="overflow-x-auto custom-scrollbar max-h-[600px]">
                 <table class="w-full text-xs text-left border-collapse">
                     <thead id="tableHeader" class="sticky top-0 z-30"></thead>
                     <tbody id="tableBody" class="divide-y divide-slate-100"></tbody>
