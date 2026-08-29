@@ -1,212 +1,188 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BioSenses Cloud Price Management System</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
-
-        // BioSenses Live Production Cloud Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
-            authDomain: "lab-referral-pricing.firebaseapp.com",
-            databaseURL: "https://lab-referral-pricing-default-rtdb.firebaseio.com",
-            projectId: "lab-referral-pricing",
-            storageBucket: "lab-referral-pricing.firebasestorage.app",
-            messagingSenderId: "230114183546",
-            appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
-        };
-
-        // Initialize Firebase Connection Nodes
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-
-        // Pre-loaded dropdown tests for Referral In tab
-        window.preloadedReferralInTests = [
-            "A1C", "Alkaline Phosphatase", "Albumin", "Amylase", "Bilirubin, total", "Bilirubin, Direct", 
-            "Calcium", "Creatinine", "Cholesterol, Total", "Cholesterol - HDL, Serum", "Cholesterol - LDL, Serum", 
-            "Chloride", "GPT (ALT)", "GOT (AST)", "GGT", "Glucose", "Iron", "Ionized CA", "lipase", "Mg", 
-            "Protein Total", "Potassium", "Sodium", "Triglyceride", "ZINC", "Urea", "Uric acid", "AMH", "BHCG", 
-            "DHEA-S", "Estradiol - E2", "Ferritin", "FSH", "Free T3", "Free T4", "LH", "Prolactin", "Progesterone", 
-            "Testosterone - Free", "Testosterone - Total", "TSH", "Thyroid Peroxidase Abs (ATPO)", "INSULIN", 
-            "Vitamin B12", "Vitamin D", "ASOt", "Anti CCP", "ANCA C", "ANCA P", "Anti DNA ds Abs, Double Stranded, Serum", 
-            "Anti Gliadin ( Deamidated DP ) IgA Abs", "Anti Gliadin ( Deamidated DP ) IgG Abs", "Anti Phospholipid – IgG", 
-            "Anti Phospholipid – IgM", "Anti cardiolipid - IgG", "Anti cardiolipid - IgM", "Anti Mitochondrial Abs (AMA)", 
-            "Anti Nuclear Abs (ANA)", "Anti Smooth Muscle Antibodies (ASMA)", "Anti Liver-Kidney Microsomal-1 (LKM-1 Abs)", 
-            "Brucella - Titer", "B2-glycoprotien Ab - IgG", "B2-glycoprotien Ab - IgM", "C3", "C4", 
-            "C-Reactive Protein , Titter", "ENA (Extractable Nuclear Antigens Abs)", "Food Allergy Panel", 
-            "Inhalation panel", "Immunoglobulin A (Total)(IgA)", "Immunoglobulin E (IgE)", "Immunoglobulin G (IgG)", 
-            "Immunoglobulin M (IgM)", "Lupus", "Rheumatoid Factor Titter", "Tissue Transglutaminase Ab, IgA", 
-            "Tissue Transglutaminase Ab, IgG", "Treponema pallidum Haemagglutination (TPHA)", "VDRL (Syphilis)", 
-            "Widal Test", "CEA", "CA 125", "CA 19.9", "CA 15-3", "AFP", "PSA total", "PSA Free", "PSA ratio", 
-            "BRCA1 & BRCA2 Breast Cancer Genes", "Culture and sensitivity", "Complete Blood Count (CBC)", 
-            "Calprotectin Quantitative, Stool", "Fecal immunochemical test", "Helicobacter pylori Antigen in Stool"
-        ];
-
-        // Isolated State Store for Referral Out
-        window.stateOut = {
-            entities: ['Medlab', 'MedScale', 'GLab', 'Alpha', 'Sultan', 'Smart'],
-            testDatabase: {},
-            currentEditingRow: null,
-            currentInputMode: 'select'
-        };
-
-        // Isolated State Store for Referral In (Empty default entities, preloaded tests)
-        window.stateIn = {
-            entities: [],
-            testDatabase: {},
-            currentEditingRow: null,
-            currentInputMode: 'select'
-        };
-
-        window.currentTab = 'out'; // 'out' | 'in'
-
-        // Helper to retrieve active tab state reference dynamically
-        window.getActiveState = function() {
-            return window.currentTab === 'out' ? window.stateOut : window.stateIn;
-        };
-
-        // Realtime Sync: Referral Out Node (lab_data_out)
-        const refOut = ref(db, 'lab_data_out');
-        onValue(refOut, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                if (data.entities) window.stateOut.entities = data.entities;
-                window.stateOut.testDatabase = data.database || {};
-            } else {
-                window.stateOut.testDatabase = {};
-            }
-            if (window.currentTab === 'out') {
-                logMessage("Cloud synced (Referral Out). Database loaded successfully.", "success");
-                initSystem();
-            }
-        }, (error) => {
-            logMessage("Cloud Read Database Failure (Referral Out): " + error.message, "error");
-        });
-
-        // Realtime Sync: Referral In Node (lab_data_in)
-        const refIn = ref(db, 'lab_data_in');
-        onValue(refIn, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                if (data.entities) window.stateIn.entities = data.entities;
-                window.stateIn.testDatabase = data.database || {};
-            } else {
-                window.stateIn.testDatabase = {};
-            }
-            if (window.currentTab === 'in') {
-                logMessage("Cloud synced (Referral In). Database loaded successfully.", "success");
-                initSystem();
-            }
-        }, (error) => {
-            logMessage("Cloud Read Database Failure (Referral In): " + error.message, "error");
-        });
-
-        // Push updates up to Firebase Cloud Node based on Active Tab
-        window.syncCloudStorage = function() {
-            const isOut = window.currentTab === 'out';
-            const targetRef = ref(db, isOut ? 'lab_data_out' : 'lab_data_in');
-            const state = window.getActiveState();
-
-            set(targetRef, {
-                entities: state.entities,
-                database: state.testDatabase
-            }).then(() => {
-                logMessage(`Cloud broadcast complete [${isOut ? 'Referral Out' : 'Referral In'}]. Sync applied.`, "success");
-            }).catch((err) => {
-                logMessage("Cloud Write Drop Failure: " + err.message, "error");
-            });
-        };
-
-        // Wipe Active Node safely
-        window.clearSystemDatabase = function() {
-            const isOut = window.currentTab === 'out';
-            if (confirm(`🚨 WARNING: Are you sure you want to clear the entire database for ${isOut ? 'Referral Out' : 'Referral In'}? This action cannot be undone.`)) {
-                const targetRef = ref(db, isOut ? 'lab_data_out' : 'lab_data_in');
-                const state = window.getActiveState();
-                state.testDatabase = {};
-                set(targetRef, {
-                    entities: state.entities,
-                    database: {}
-                }).then(() => {
-                    logMessage(`Database reset complete [${isOut ? 'Referral Out' : 'Referral In'}].`, "error");
-                }).catch((err) => {
-                    logMessage("Cloud Database Reset Failure: " + err.message, "error");
-                });
-            }
-        };
-    </script>
-    <style>
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f5f9;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Referral Manager</title>
+  <link rel="icon" href="./favicon.ico" type="image/x-icon" />
+  
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans pb-16 antialiased">
+<body class="bg-slate-50 text-slate-800 min-h-screen">
 
-    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-20 items-center">
-                <div class="flex items-center gap-4">
-                    <img src="logo-04.jpg" alt="BioSenses Logo" class="h-14 w-auto object-contain">
-                    <div class="border-l border-slate-200 pl-4">
-                        <h1 class="text-xl font-bold text-slate-900 tracking-tight">BioSenses Portal</h1>
-                        <p class="text-xs text-indigo-600 font-semibold tracking-wide uppercase">Real-Time Sync Infrastructure</p>
-                    </div>
-                </div>
-                
-                <div class="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
-                    <button id="tabBtnOut" onclick="switchTab('out')" class="px-5 py-2 text-xs font-bold rounded-lg transition-all bg-indigo-600 text-white shadow-sm">
-                        Referral Out
-                    </button>
-                    <button id="tabBtnIn" onclick="switchTab('in')" class="px-5 py-2 text-xs font-bold rounded-lg transition-all text-slate-600 hover:text-slate-900">
-                        Referral In
-                    </button>
-                </div>
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
+    <div class="flex items-center space-x-3">
+      <img 
+        src="./logo-04.jpg" 
+        alt="Logo" 
+        class="h-8 w-auto object-contain"
+        onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"
+      />
+      <span class="hidden text-xl font-bold text-indigo-600">Biosenses Labs</span>
+      <h1 class="text-lg font-semibold text-slate-700 border-l pl-3 border-slate-300">Referral Manager</h1>
+    </div>
+    <div class="flex items-center space-x-2">
+      <span id="connection-status" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+        Connecting...
+      </span>
+    </div>
+  </header>
 
-                <button onclick="clearSystemDatabase()" class="bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold px-4 py-2 rounded-lg border border-rose-200 transition-colors shadow-sm">
-                    ⚠ Reset Cloud Database
-                </button>
-            </div>
+  <main class="max-w-6xl mx-auto p-6 space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      
+      <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+        <h2 class="text-md font-semibold text-slate-900 mb-4">Add New Referral</h2>
+        <form id="referral-form" class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 uppercase mb-1">Referral Name</label>
+            <input type="text" id="ref-name" required class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Jane Doe" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 uppercase mb-1">Category / Service</label>
+            <input type="text" id="ref-category" required class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Diagnostic Package" />
+          </div>
+          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md text-sm transition-colors">
+            Submit Record
+          </button>
+        </form>
+      </div>
+
+      <div class="md:col-span-2 bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+        <h2 class="text-md font-semibold text-slate-900 mb-4">Live Synchronization Data</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="border-b border-slate-200 text-slate-500 font-medium">
+                <th class="py-2 px-3">ID</th>
+                <th class="py-2 px-3">Name</th>
+                <th class="py-2 px-3">Category</th>
+              </tr>
+            </thead>
+            <tbody id="referral-table-body" class="divide-y divide-slate-100">
+              <tr>
+                <td colspan="3" class="py-4 text-center text-slate-400 italic">Waiting for connection...</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-    </nav>
+      </div>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 space-y-6">
-        
-        <div id="systemLog" class="p-4 rounded-xl text-xs font-mono shadow-sm border border-slate-200 transition-all duration-300 bg-amber-50 text-amber-800 border-amber-200">Connecting to cloud synchronization engine...</div>
+    </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Active Tests</p>
-                    <h3 id="statTests" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
-                </div>
-                <div class="bg-indigo-50 text-indigo-600 p-3 rounded-lg font-bold text-lg">🧪</div>
-            </div>
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Managed Labs</p>
-                    <h3 id="statEntities" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
-                </div>
-                <div class="bg-emerald-50 text-emerald-600 p-3 rounded-lg font-bold text-lg">🏢</div>
-            </div>
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Network Cluster Status</p>
-                    <h3 class="text-lg font-bold text-emerald-600
+    <div class="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-xs">
+      <div class="flex justify-between items-center mb-2 pb-1 border-b border-slate-800">
+        <span class="font-bold text-slate-400 uppercase">System Console Log</span>
+        <button id="clear-log" class="text-slate-500 hover:text-slate-300">Clear</button>
+      </div>
+      <div id="console-output" class="h-32 overflow-y-auto space-y-1 text-slate-300"></div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, onValue, push, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    // Standardized logMessage implementation to eliminate ReferenceError
+    window.logMessage = function(msg, level = 'info') {
+      const output = document.getElementById('console-output');
+      if (!output) return;
+      
+      const time = new Date().toISOString().substring(11, 19);
+      const entry = document.createElement('div');
+      
+      if (level === 'error') entry.className = 'text-rose-400';
+      else if (level === 'warn') entry.className = 'text-amber-400';
+      else entry.className = 'text-emerald-400';
+
+      entry.textContent = `[${time}] ${msg}`;
+      output.appendChild(entry);
+      output.scrollTop = output.scrollHeight;
+      
+      console.log(`[${level.toUpperCase()}] ${msg}`);
+    };
+
+    // Firebase Configuration Placeholder
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // Initialize Database Connection
+    let app, db;
+    try {
+      app = initializeApp(firebaseConfig);
+      db = getDatabase(app);
+      
+      // Update status badge
+      const statusBadge = document.getElementById('connection-status');
+      statusBadge.textContent = 'Connected';
+      statusBadge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800';
+      
+      logMessage("Connected to cloud database engine successfully.");
+    } catch (err) {
+      logMessage(`Initialization failed: ${err.message}`, 'error');
+    }
+
+    // Attach Real-time Database Listener
+    const referralsRef = ref(db, 'referrals');
+    
+    // Line 85 Listener with Fixed Logger Binding
+    onValue(referralsRef, (snapshot) => {
+      logMessage("Database update detected."); // Safe call to defined logMessage
+      
+      const tableBody = document.getElementById('referral-table-body');
+      tableBody.innerHTML = '';
+      
+      const data = snapshot.val();
+      if (!data) {
+        tableBody.innerHTML = `<tr><td colspan="3" class="py-4 text-center text-slate-400 italic">No records found.</td></tr>`;
+        return;
+      }
+
+      Object.keys(data).forEach((key) => {
+        const item = data[key];
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="py-2.5 px-3 font-mono text-xs text-slate-500">${key.substring(0, 6)}...</td>
+          <td class="py-2.5 px-3 font-medium text-slate-800">${item.name || 'N/A'}</td>
+          <td class="py-2.5 px-3 text-slate-600">${item.category || 'N/A'}</td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }, (error) => {
+      logMessage(`Database error: ${error.message}`, 'error');
+    });
+
+    // Form Submission Handling
+    document.getElementById('referral-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const nameInput = document.getElementById('ref-name');
+      const categoryInput = document.getElementById('ref-category');
+
+      const newRef = push(referralsRef);
+      set(newRef, {
+        name: nameInput.value,
+        category: categoryInput.value,
+        timestamp: Date.now()
+      }).then(() => {
+        logMessage(`Record added: ${nameInput.value}`);
+        nameInput.value = '';
+        categoryInput.value = '';
+      }).catch((err) => {
+        logMessage(`Failed to save: ${err.message}`, 'error');
+      });
+    });
+
+    // Clear Logs UI
+    document.getElementById('clear-log').addEventListener('click', () => {
+      document.getElementById('console-output').innerHTML = '';
+    });
+  </script>
+</body>
+</html>
