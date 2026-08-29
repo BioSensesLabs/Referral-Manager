@@ -5,20 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BioSenses Cloud Price Management System</title>
 
-    <!-- Standalone Production CSS -->
+    <!-- Tailwind CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" />
     
-    <!-- Inline SVG Favicon -->
+    <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>">
 
-    <!-- Excel Export/Import Library -->
+    <!-- XLSX Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // BioSenses Production Cloud Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
             authDomain: "lab-referral-pricing.firebaseapp.com",
@@ -29,12 +28,10 @@
             appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
         };
 
-        // Initialize Firebase Connection
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // System State Management
-        window.activeTab = 'out'; // 'out' or 'in'
+        window.activeTab = 'out';
         window.dataLoaded = { out: false, in: false };
 
         window.stateData = {
@@ -52,7 +49,6 @@
             }
         };
 
-        // Global UI Logger
         window.logMessage = function(msg, type) {
             const box = document.getElementById('systemLog');
             if (!box) return;
@@ -67,32 +63,45 @@
 
         window.sanitizeCloudKey = function(keyStr) {
             if (!keyStr) return "";
-            return String(keyStr).replace(/[\.\#\$\/\[\]]/g, "-");
+            return String(keyStr).trim().replace(/[\.\#\$\/\[\]]/g, "-");
         };
 
-        // Database References
         const refOut = ref(db, 'lab_data/referral_out');
         const refIn = ref(db, 'lab_data/referral_in');
 
-        // Helper: Normalizes Firebase snapshot tree into clean testDatabase object
-        function extractDatabaseNode(rawSnapshotData) {
-            if (!rawSnapshotData || typeof rawSnapshotData !== 'object') return {};
-            
-            let rawTree = rawSnapshotData.database ? rawSnapshotData.database : rawSnapshotData;
+        // Robust Unwrapper: Recursively traverses Firebase objects to find actual test records
+        function extractDatabaseNode(raw) {
+            if (!raw || typeof raw !== 'object') return {};
             let cleanDb = {};
 
-            Object.keys(rawTree).forEach(key => {
-                if (key === 'entities') return;
-                const val = rawTree[key];
-                if (typeof val === 'object' && val !== null) {
-                    cleanDb[key] = val;
-                }
-            });
+            function traverse(node) {
+                if (!node || typeof node !== 'object') return;
 
+                Object.keys(node).forEach(k => {
+                    if (k === 'entities') return;
+                    const val = node[k];
+
+                    // Check if node has a 'testName' property or if the child keys match known entity names
+                    if (val && typeof val === 'object') {
+                        let subKeys = Object.keys(val);
+                        let hasEntityMatch = subKeys.some(sk => window.stateData[window.activeTab].entities.includes(sk));
+                        
+                        if (val.testName && typeof val.testName === 'string') {
+                            cleanDb[window.sanitizeCloudKey(val.testName)] = val;
+                        } else if (hasEntityMatch) {
+                            cleanDb[window.sanitizeCloudKey(k)] = val;
+                        } else {
+                            traverse(val);
+                        }
+                    }
+                });
+            }
+
+            traverse(raw);
             return cleanDb;
         }
 
-        // Real-time listener: Referral Out
+        // Snapshot Listener: Referral Out
         onValue(refOut, (snapshot) => {
             const data = snapshot.val();
             window.dataLoaded.out = true;
@@ -106,17 +115,17 @@
                 window.stateData.out.testDatabase = {};
             }
             
-            if (window.activeTab === 'out' && typeof window.initSystem === 'function') {
+            if (window.activeTab === 'out') {
                 window.initSystem();
             }
             const count = Object.keys(window.stateData.out.testDatabase).length;
-            window.logMessage(`Referral Out synchronized. ${count} test(s) loaded.`, "success");
+            window.logMessage(`Referral Out synchronized. ${count} record(s) active.`, "success");
         }, (error) => {
             window.dataLoaded.out = true;
-            window.logMessage("Referral Out Read Error: " + error.message, "error");
+            window.logMessage("Referral Out Error: " + error.message, "error");
         });
 
-        // Real-time listener: Referral In
+        // Snapshot Listener: Referral In
         onValue(refIn, (snapshot) => {
             const data = snapshot.val();
             window.dataLoaded.in = true;
@@ -130,17 +139,16 @@
                 window.stateData.in.testDatabase = {};
             }
 
-            if (window.activeTab === 'in' && typeof window.initSystem === 'function') {
+            if (window.activeTab === 'in') {
                 window.initSystem();
             }
             const count = Object.keys(window.stateData.in.testDatabase).length;
-            window.logMessage(`Referral In synchronized. ${count} test(s) loaded.`, "success");
+            window.logMessage(`Referral In synchronized. ${count} record(s) active.`, "success");
         }, (error) => {
             window.dataLoaded.in = true;
-            window.logMessage("Referral In Read Error: " + error.message, "error");
+            window.logMessage("Referral In Error: " + error.message, "error");
         });
 
-        // Save active tab state to Cloud
         window.syncCloudStorage = function() {
             const currentRef = window.activeTab === 'out' ? refOut : refIn;
             const state = window.stateData[window.activeTab];
@@ -149,13 +157,12 @@
                 entities: state.entities,
                 database: state.testDatabase
             }).then(() => {
-                window.logMessage(`Cloud broadcast complete for Referral ${window.activeTab.toUpperCase()}.`, "success");
+                window.logMessage(`Cloud updated for Referral ${window.activeTab.toUpperCase()}.`, "success");
             }).catch((err) => {
-                window.logMessage("Cloud Write Failure: " + err.message, "error");
+                window.logMessage("Cloud Write Error: " + err.message, "error");
             });
         };
 
-        // Tab Switcher
         window.switchTab = function(tab) {
             window.activeTab = tab;
             const btnOut = document.getElementById('tabBtnOut');
@@ -177,23 +184,14 @@
             window.initSystem();
         };
 
-        window.validateNameChange = function(oldName, newName) {
-            if (!newName || newName.trim() === "") return { valid: false, msg: "Test name cannot be empty." };
-            let sanitized = window.sanitizeCloudKey(newName.trim());
-            const state = window.stateData[window.activeTab];
-            if (sanitized !== oldName && state.testDatabase[sanitized]) {
-                return { valid: false, msg: "A test with this name already exists." };
-            }
-            return { valid: true, sanitized: sanitized };
-        };
-
         window.initSystem = function() {
             const state = window.stateData[window.activeTab];
             const uploadSection = document.getElementById('uploadSection');
             if (uploadSection) {
-                let statusInfo = Object.keys(state.testDatabase).length > 0 
-                    ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${Object.keys(state.testDatabase).length} tests loaded)</span>`
-                    : '<span class="text-[10px] text-slate-400 block text-center font-medium mt-1">No active tests in current database node.</span>';
+                let count = Object.keys(state.testDatabase).length;
+                let statusInfo = count > 0 
+                    ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${count} test records loaded)</span>`
+                    : '<span class="text-[10px] text-slate-400 block text-center font-medium mt-1">No tests found in active view.</span>';
                 
                 uploadSection.className = "bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5";
                 uploadSection.innerHTML = `
@@ -240,12 +238,6 @@
                 if (btnSelect) btnSelect.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all font-bold";
                 if (btnCreate) btnCreate.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
             }
-            const priceForm = document.getElementById('priceForm');
-            if (priceForm) priceForm.reset();
-            state.entities.forEach(ent => {
-                const input = document.getElementById(`form-price-${ent}`);
-                if (input) input.value = 0;
-            });
         };
 
         window.bindExcelUploadListener = function() {
@@ -273,9 +265,8 @@
                             let rawTestName = row[0] ? String(row[0]).trim() : "";
                             let basePrice = row[1] ? parseFloat(row[1]) : 0;
 
-                            if (rawTestName && rawTestName !== "undefined" && rawTestName !== "") {
+                            if (rawTestName) {
                                 let testName = window.sanitizeCloudKey(rawTestName);
-
                                 if (!state.testDatabase[testName]) {
                                     state.testDatabase[testName] = {};
                                     state.entities.forEach(ent => state.testDatabase[testName][ent] = 0);
@@ -284,8 +275,8 @@
                             }
                         }
                         window.syncCloudStorage();
-                    } catch (parseError) {
-                        window.logMessage("Spreadsheet upload parsing failed: " + parseError.message, "error");
+                    } catch (err) {
+                        window.logMessage("Excel Parse Error: " + err.message, "error");
                     }
                 };
                 reader.readAsBinaryString(file);
@@ -313,11 +304,11 @@
         };
 
         window.deleteOperationalEntity = function(entityName) {
-            if (confirm(`🚨 WARNING: Delete entity column "${entityName}"? This drops its saved rates.`)) {
+            if (confirm(`Delete entity "${entityName}"?`)) {
                 const state = window.stateData[window.activeTab];
                 state.entities = state.entities.filter(ent => ent !== entityName);
                 Object.keys(state.testDatabase).forEach(testKey => {
-                    if (state.testDatabase[testKey] && state.testDatabase[testKey][entityName] !== undefined) {
+                    if (state.testDatabase[testKey]) {
                         delete state.testDatabase[testKey][entityName];
                     }
                 });
@@ -326,10 +317,8 @@
         };
 
         window.clearSystemDatabase = function() {
-            const tabName = window.activeTab === 'out' ? 'Referral Out' : 'Referral In';
-            if (confirm(`🚨 WARNING: Are you sure you want to clear all database entries for [${tabName}]?`)) {
-                const state = window.stateData[window.activeTab];
-                state.testDatabase = {};
+            if (confirm(`Reset all records for ${window.activeTab.toUpperCase()}?`)) {
+                window.stateData[window.activeTab].testDatabase = {};
                 window.syncCloudStorage();
             }
         };
@@ -340,7 +329,9 @@
             const state = window.stateData[window.activeTab];
             dropdown.innerHTML = '<option value="">-- Choose a test --</option>';
             Object.keys(state.testDatabase).sort().forEach(test => {
-                const opt = document.createElement('option'); opt.value = test; opt.textContent = test;
+                const opt = document.createElement('option');
+                opt.value = test;
+                opt.textContent = test;
                 dropdown.appendChild(opt);
             });
         };
@@ -395,13 +386,7 @@
 
             window.syncCloudStorage();
             const textInput = document.getElementById('testTextInput');
-            const priceForm = document.getElementById('priceForm');
             if (textInput) textInput.value = "";
-            if (priceForm) priceForm.reset();
-            state.entities.forEach(ent => {
-                const el = document.getElementById(`form-price-${ent}`);
-                if (el) el.value = 0;
-            });
         };
 
         window.renderTable = function() {
@@ -412,24 +397,23 @@
             const searchStr = searchInput ? searchInput.value.toLowerCase().trim() : "";
             const state = window.stateData[window.activeTab];
 
-            let headerHTML = `<tr><th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b text-left">Test Name</th>`;
+            let headerHTML = `<tr><th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 border-b text-left">Test Name</th>`;
             state.entities.forEach(ent => { 
                 headerHTML += `
                     <th class="px-2 py-3 w-28 text-slate-700 font-bold border-b bg-slate-50 text-left">
                         <div class="flex items-center gap-1 justify-between">
-                            <span class="truncate" title="${ent}">${ent}</span>
-                            <button onclick="window.deleteOperationalEntity('${ent}')" class="text-slate-300 hover:text-rose-600 text-[9px] p-0.5 rounded transition-colors" title="Delete Entity">❌</button>
+                            <span class="truncate">${ent}</span>
+                            <button onclick="window.deleteOperationalEntity('${ent}')" class="text-slate-300 hover:text-rose-600 text-[9px]">❌</button>
                         </div>
                     </th>`; 
             });
-            headerHTML += `<th class="px-3 py-3 w-36 text-center text-slate-700 font-bold sticky right-0 bg-slate-50 border-b z-20 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">Actions</th></tr>`;
+            headerHTML += `<th class="px-3 py-3 w-36 text-center text-slate-700 font-bold sticky right-0 bg-slate-50 border-b z-20">Actions</th></tr>`;
             header.innerHTML = headerHTML;
 
             body.innerHTML = '';
             
-            // Check if Firebase fetch has resolved
             if (!window.dataLoaded[window.activeTab]) {
-                body.innerHTML = `<tr><td colspan="${state.entities.length + 2}" class="text-center p-12 text-slate-400 font-medium animate-pulse">Fetching cloud database records...</td></tr>`;
+                body.innerHTML = `<tr><td colspan="${state.entities.length + 2}" class="text-center p-12 text-slate-400 font-medium animate-pulse">Syncing Cloud Records...</td></tr>`;
                 return;
             }
 
@@ -447,74 +431,68 @@
                 const rowData = state.testDatabase[test] || {};
                 
                 tr.className = isEditing 
-                    ? "bg-indigo-50/50 border-y-2 border-indigo-400 font-medium transition-colors" 
-                    : "hover:bg-slate-50/80 transition-colors border-b border-slate-100 bg-white";
+                    ? "bg-indigo-50/50 border-y-2 border-indigo-400 font-medium" 
+                    : "hover:bg-slate-50 border-b border-slate-100 bg-white";
 
                 let rowHTML = "";
                 if (isEditing) {
-                    rowHTML += `
-                    <td class="px-2 py-1.5 sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">
-                        <input type="text" value="${test}" id="inline-edit-testname" class="w-full border border-indigo-400 rounded px-2 py-1 text-xs font-semibold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500">
-                    </td>`;
+                    rowHTML += `<td class="px-2 py-1.5 sticky left-0 bg-inherit z-10 border-r border-slate-100"><input type="text" value="${test}" id="inline-edit-testname" class="w-full border border-indigo-400 rounded px-2 py-1 text-xs font-semibold"></td>`;
                 } else {
-                    rowHTML += `<td class="px-3 py-2 font-semibold text-slate-900 break-words sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">${test}</td>`;
+                    rowHTML += `<td class="px-3 py-2 font-semibold text-slate-900 sticky left-0 bg-inherit z-10 border-r border-slate-100">${test}</td>`;
                 }
                 
-                let pricesArr = [];
-                state.entities.forEach(ent => {
-                    const val = rowData[ent] !== undefined ? parseFloat(rowData[ent]) : 0;
-                    pricesArr.push(val);
-                });
-
+                let pricesArr = state.entities.map(ent => rowData[ent] !== undefined ? parseFloat(rowData[ent]) : 0);
                 let minVal = Math.min(...pricesArr);
                 let maxVal = Math.max(...pricesArr);
                 let allEqual = pricesArr.every(v => v === pricesArr[0]);
 
                 state.entities.forEach(ent => {
                     const price = rowData[ent] !== undefined ? parseFloat(rowData[ent]) : 0;
-                    
                     let cellBgClass = "";
                     if (!allEqual && !isEditing) {
-                        if (price === minVal) cellBgClass = "bg-emerald-100 text-emerald-900 font-bold rounded-xs shadow-xs";
-                        else if (price === maxVal) cellBgClass = "bg-rose-100 text-rose-900 font-bold rounded-xs shadow-xs";
+                        if (price === minVal) cellBgClass = "bg-emerald-100 text-emerald-900 font-bold";
+                        else if (price === maxVal) cellBgClass = "bg-rose-100 text-rose-900 font-bold";
                     }
 
                     rowHTML += isEditing 
-                        ? `<td class="px-1.5 py-1.5"><input type="number" step="0.01" value="${price}" id="inline-edit-${ent}" class="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-xs font-mono font-bold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500"></td>`
-                        : `<td class="px-2 py-2 font-mono text-slate-600 transition-colors ${cellBgClass}">${Number(price).toFixed(2)}</td>`;
+                        ? `<td class="px-1.5 py-1.5"><input type="number" step="0.01" value="${price}" id="inline-edit-${ent}" class="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-xs font-mono font-bold"></td>`
+                        : `<td class="px-2 py-2 font-mono text-slate-600 ${cellBgClass}">${Number(price).toFixed(2)}</td>`;
                 });
                 
                 tr.innerHTML = rowHTML;
 
                 const tdActions = document.createElement('td');
-                tdActions.className = "px-3 py-2 text-center space-x-1.5 whitespace-nowrap sticky right-0 bg-inherit z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] border-l border-slate-100";
+                tdActions.className = "px-3 py-2 text-center space-x-1.5 whitespace-nowrap sticky right-0 bg-inherit z-10 border-l border-slate-100";
 
                 if (isEditing) {
                     const saveBtn = document.createElement('button');
-                    saveBtn.className = "bg-indigo-600 text-white hover:bg-indigo-700 px-2 py-1 text-[10px] font-bold rounded shadow-sm transition-colors";
-                    saveBtn.innerText = "Save"; saveBtn.dataset.oldTestName = test;
-                    saveBtn.addEventListener('click', function() { window.saveInlineRowChanges(this.dataset.oldTestName); });
+                    saveBtn.className = "bg-indigo-600 text-white px-2 py-1 text-[10px] font-bold rounded";
+                    saveBtn.innerText = "Save";
+                    saveBtn.onclick = () => window.saveInlineRowChanges(test);
 
                     const cancelBtn = document.createElement('button');
-                    cancelBtn.className = "bg-slate-200 text-slate-700 hover:bg-slate-300 px-2 py-1 text-[10px] font-bold rounded transition-colors";
+                    cancelBtn.className = "bg-slate-200 text-slate-700 px-2 py-1 text-[10px] font-bold rounded";
                     cancelBtn.innerText = "Cancel";
-                    cancelBtn.addEventListener('click', function() { state.currentEditingRow = null; window.renderTable(); });
+                    cancelBtn.onclick = () => { state.currentEditingRow = null; window.renderTable(); };
 
-                    tdActions.appendChild(saveBtn); tdActions.appendChild(cancelBtn);
+                    tdActions.appendChild(saveBtn); 
+                    tdActions.appendChild(cancelBtn);
                 } else {
                     const editBtn = document.createElement('button');
-                    editBtn.className = "text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 px-2 py-0.5 rounded text-[11px] font-bold transition-all";
-                    editBtn.innerText = "Edit"; editBtn.dataset.testName = test;
-                    editBtn.addEventListener('click', function() { state.currentEditingRow = this.dataset.testName; window.renderTable(); });
+                    editBtn.className = "text-indigo-600 hover:text-indigo-900 px-2 py-0.5 text-[11px] font-bold";
+                    editBtn.innerText = "Edit";
+                    editBtn.onclick = () => { state.currentEditingRow = test; window.renderTable(); };
 
                     const deleteBtn = document.createElement('button');
-                    deleteBtn.className = "text-rose-600 hover:text-rose-900 hover:bg-rose-50 border border-transparent hover:border-rose-100 px-2 py-0.5 rounded text-[11px] font-bold transition-all";
-                    deleteBtn.innerText = "Delete"; deleteBtn.dataset.testName = test;
-                    deleteBtn.addEventListener('click', function() { window.handleDeleteClick(this.dataset.testName); });
+                    deleteBtn.className = "text-rose-600 hover:text-rose-900 px-2 py-0.5 text-[11px] font-bold";
+                    deleteBtn.innerText = "Delete";
+                    deleteBtn.onclick = () => window.handleDeleteClick(test);
 
-                    tdActions.appendChild(editBtn); tdActions.appendChild(deleteBtn);
+                    tdActions.appendChild(editBtn); 
+                    tdActions.appendChild(deleteBtn);
                 }
-                tr.appendChild(tdActions); body.appendChild(tr);
+                tr.appendChild(tdActions); 
+                body.appendChild(tr);
             });
         };
 
@@ -522,32 +500,28 @@
             const nameField = document.getElementById('inline-edit-testname');
             if (!nameField) return;
 
-            let check = window.validateNameChange(oldTestName, nameField.value);
-            if (!check.valid) {
-                alert(check.msg);
-                return;
-            }
+            let newName = window.sanitizeCloudKey(nameField.value.trim());
+            if (!newName) return;
 
-            let newSanitizedName = check.sanitized;
-            let targetRowData = {};
             const state = window.stateData[window.activeTab];
+            let targetRowData = {};
 
             state.entities.forEach(ent => {
                 const el = document.getElementById(`inline-edit-${ent}`);
                 if (el) targetRowData[ent] = parseFloat(el.value) || 0;
             });
 
-            if (oldTestName !== newSanitizedName) {
+            if (oldTestName !== newName) {
                 delete state.testDatabase[oldTestName];
             }
 
-            state.testDatabase[newSanitizedName] = targetRowData;
+            state.testDatabase[newName] = targetRowData;
             state.currentEditingRow = null;
             window.syncCloudStorage();
         };
 
         window.handleDeleteClick = function(testName) {
-            if (confirm(`Delete test entry permanently: "${testName}"?`)) {
+            if (confirm(`Delete test "${testName}"?`)) {
                 const state = window.stateData[window.activeTab];
                 delete state.testDatabase[testName];
                 if (state.currentEditingRow === testName) state.currentEditingRow = null;
@@ -570,20 +544,12 @@
             XLSX.writeFile(workbook, `BioSenses_Pricing_Master_${window.activeTab.toUpperCase()}_${new Date().toISOString().slice(0,10)}.xlsx`);
         };
 
-        // DOM Lifecycle Safeguard Initialization
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => window.initSystem());
         } else {
             window.initSystem();
         }
     </script>
-
-    <style>
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans pb-16 antialiased">
 
@@ -591,14 +557,14 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-20 items-center">
                 <div class="flex items-center gap-4">
-                    <div class="h-12 w-12 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-inner">BS</div>
+                    <div class="h-12 w-12 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-xl">BS</div>
                     <div class="border-l border-slate-200 pl-4">
                         <h1 class="text-xl font-bold text-slate-900 tracking-tight">BioSenses Portal</h1>
                         <p class="text-xs text-indigo-600 font-semibold tracking-wide uppercase">Real-Time Sync Infrastructure</p>
                     </div>
                 </div>
-                <button onclick="window.clearSystemDatabase()" class="bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold px-4 py-2 rounded-lg border border-rose-200 transition-colors shadow-sm">
-                    ⚠ Reset Cloud Database
+                <button onclick="window.clearSystemDatabase()" class="bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold px-4 py-2 rounded-lg border border-rose-200 shadow-sm">
+                    ⚠ Reset Active Node
                 </button>
             </div>
         </div>
@@ -606,19 +572,17 @@
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
 
-        <!-- Navigation Tabs -->
         <div class="flex border-b border-slate-200">
-            <button id="tabBtnOut" onclick="window.switchTab('out')" class="py-3 px-6 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center gap-2">
+            <button id="tabBtnOut" onclick="window.switchTab('out')" class="py-3 px-6 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-2">
                 <span>📤 Referral Out</span>
             </button>
-            <button id="tabBtnIn" onclick="window.switchTab('in')" class="py-3 px-6 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-all flex items-center gap-2">
+            <button id="tabBtnIn" onclick="window.switchTab('in')" class="py-3 px-6 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2">
                 <span>📥 Referral In</span>
             </button>
         </div>
         
-        <div id="systemLog" class="p-4 rounded-xl text-xs font-mono shadow-sm border border-slate-200 transition-all duration-300 bg-amber-50 text-amber-800 border-amber-200">Connecting to cloud synchronization engine...</div>
+        <div id="systemLog" class="p-4 rounded-xl text-xs font-mono shadow-sm border border-slate-200 bg-amber-50 text-amber-800 border-amber-200">Connecting to cloud synchronization engine...</div>
 
-        <!-- Dashboard Stat Cards -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
                 <div>
@@ -643,32 +607,26 @@
             </div>
         </div>
 
-        <!-- System Operations Header Section -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Left: Add New Entity & Import Master -->
             <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Data Administration</h2>
-                
                 <div>
-                    <label class="block text-xs text-slate-500 font-medium mb-1">Add Laboratory / Entity Column:</label>
+                    <label class="block text-xs text-slate-500 font-medium mb-1">Add Laboratory Column:</label>
                     <div class="flex gap-2">
                         <input type="text" id="newEntityInput" placeholder="e.g. BioLab" class="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50">
                         <button onclick="window.addNewEntity()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">+ Add</button>
                     </div>
                 </div>
-
                 <div id="uploadSection"></div>
             </div>
 
-            <!-- Right: Rate Update / Creation Panel -->
             <div class="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <form id="priceForm" onsubmit="window.saveFormPrice(event)" class="space-y-4">
                     <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                         <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Pricing Control Panel</h2>
-                        
                         <div class="bg-slate-100 p-1 rounded-lg flex text-xs font-semibold">
-                            <button type="button" id="modeSelectBtn" onclick="window.toggleTestInputMode('select')" class="bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all font-bold">Select Existing</button>
-                            <button type="button" id="modeCreateBtn" onclick="window.toggleTestInputMode('create')" class="text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all">Create New</button>
+                            <button type="button" id="modeSelectBtn" onclick="window.toggleTestInputMode('select')" class="bg-white text-indigo-600 px-3 py-1 rounded shadow-xs font-bold">Select Existing</button>
+                            <button type="button" id="modeCreateBtn" onclick="window.toggleTestInputMode('create')" class="text-slate-600 hover:text-slate-900 px-3 py-1 rounded">Create New</button>
                         </div>
                     </div>
 
@@ -681,26 +639,22 @@
                     <div id="dynamicFormPrices" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
 
                     <div class="flex justify-end pt-2">
-                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-6 py-2 rounded-lg shadow-sm transition-colors">Save Entry to Cloud</button>
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-6 py-2 rounded-lg shadow-sm">Save Record</button>
                     </div>
                 </form>
             </div>
         </div>
 
-        <!-- Master Data View Table -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
-                <div class="flex items-center gap-2">
-                    <h2 id="tableHeaderTitle" class="text-base font-bold text-slate-800">Master Referral (Out) View</h2>
-                </div>
-
+                <h2 id="tableHeaderTitle" class="text-base font-bold text-slate-800">Master Referral (Out) View</h2>
                 <div class="flex items-center gap-3 w-full sm:w-auto">
                     <input type="text" id="searchInput" oninput="window.renderTable()" placeholder="Search test names..." class="w-full sm:w-64 border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                    <button onclick="window.downloadExcelTable()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-1.5 rounded-lg transition-colors whitespace-nowrap shadow-sm">📥 Export Excel</button>
+                    <button onclick="window.downloadExcelTable()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-1.5 rounded-lg shadow-sm">📥 Export Excel</button>
                 </div>
             </div>
 
-            <div class="overflow-x-auto custom-scrollbar max-h-[600px]">
+            <div class="overflow-x-auto max-h-[600px]">
                 <table class="w-full text-xs text-left border-collapse">
                     <thead id="tableHeader" class="sticky top-0 z-30"></thead>
                     <tbody id="tableBody" class="divide-y divide-slate-100"></tbody>
