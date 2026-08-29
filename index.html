@@ -206,13 +206,13 @@
                 if (dropEl) { dropEl.classList.add('hidden'); dropEl.removeAttribute('required'); }
                 if (textEl) { textEl.classList.remove('hidden'); textEl.setAttribute('required', 'true'); }
                 if (lblEl) lblEl.innerText = "New Test Name";
-                if (btnCreate) btnCreate.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
+                if (btnCreate) btnCreate.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all font-bold";
                 if (btnSelect) btnSelect.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
             } else {
                 if (textEl) { textEl.classList.add('hidden'); textEl.removeAttribute('required'); }
                 if (dropEl) { dropEl.classList.remove('hidden'); dropEl.setAttribute('required', 'true'); }
                 if (lblEl) lblEl.innerText = "Target Test";
-                if (btnSelect) btnSelect.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
+                if (btnSelect) btnSelect.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all font-bold";
                 if (btnCreate) btnCreate.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
             }
             const priceForm = document.getElementById('priceForm');
@@ -538,10 +538,12 @@
             XLSX.writeFile(workbook, `BioSenses_Pricing_Master_${window.activeTab.toUpperCase()}_${new Date().toISOString().slice(0,10)}.xlsx`);
         };
 
-        // DOM Lifecycle Safeguard Initialization
-        document.addEventListener('DOMContentLoaded', () => {
+        // DOM Lifecycle Safeguard Initialization (Handles Async Script Load Races)
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => window.initSystem());
+        } else {
             window.initSystem();
-        });
+        }
     </script>
 
     <style>
@@ -602,62 +604,79 @@
             </div>
             <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
                 <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Database Mode</p>
-                    <h3 id="statActiveTab" class="text-lg font-bold text-indigo-600 mt-1 flex items-center gap-1">Referral Out</h3>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Scope</p>
+                    <h3 id="statActiveTab" class="text-2xl font-bold text-indigo-600 mt-1">Referral Out</h3>
                 </div>
-                <div class="bg-amber-50 text-amber-600 p-3 rounded-lg font-bold text-lg">☁</div>
+                <div class="bg-indigo-50 text-indigo-600 p-3 rounded-lg font-bold text-lg">📋</div>
             </div>
         </div>
 
-        <!-- Action Panel -->
+        <!-- System Operations Header Section -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left: Add New Entity & Import Master -->
             <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h2 class="font-bold text-slate-900 text-sm">Batch Sheet Synchronization</h2>
-                <div id="uploadSection"></div>
-            </div>
-
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 lg:col-span-2">
-                <div class="flex items-center justify-between">
-                    <h2 class="font-bold text-slate-900 text-sm">Price Entry & Updates</h2>
-                    <div class="bg-slate-100 p-1 rounded-lg flex text-xs font-medium">
-                        <button id="modeSelectBtn" onclick="window.toggleTestInputMode('select')" class="bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all">Existing Test</button>
-                        <button id="modeCreateBtn" onclick="window.toggleTestInputMode('create')" class="text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all">New Test</button>
+                <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Data Administration</h2>
+                
+                <div>
+                    <label class="block text-xs text-slate-500 font-medium mb-1">Add Laboratory / Entity Column:</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="newEntityInput" placeholder="e.g. BioLab" class="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50">
+                        <button onclick="window.addNewEntity()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">+ Add</button>
                     </div>
                 </div>
 
+                <div id="uploadSection"></div>
+            </div>
+
+            <!-- Right: Rate Update / Creation Panel -->
+            <div class="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <form id="priceForm" onsubmit="window.saveFormPrice(event)" class="space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Pricing Control Panel</h2>
+                        
+                        <div class="bg-slate-100 p-1 rounded-lg flex text-xs font-semibold">
+                            <button type="button" id="modeSelectBtn" onclick="window.toggleTestInputMode('select')" class="bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all font-bold">Select Existing</button>
+                            <button type="button" id="modeCreateBtn" onclick="window.toggleTestInputMode('create')" class="text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all">Create New</button>
+                        </div>
+                    </div>
+
                     <div>
                         <label id="testInputLabel" class="block text-xs font-medium text-slate-600 mb-1">Target Test</label>
                         <select id="testDropdown" required class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500 bg-white"></select>
-                        <input type="text" id="testTextInput" placeholder="Enter new test name" class="hidden w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500 bg-white"/>
+                        <input type="text" id="testTextInput" placeholder="Enter custom test name..." class="hidden w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
                     </div>
+
                     <div id="dynamicFormPrices" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
-                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors shadow-sm">Save Pricing Node</button>
+
+                    <div class="flex justify-end pt-2">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-6 py-2 rounded-lg shadow-sm transition-colors">Save Entry to Cloud</button>
+                    </div>
                 </form>
             </div>
         </div>
 
-        <!-- Master Data Grid Table -->
+        <!-- Master Data View Table -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row gap-4 items-center justify-between">
-                <div>
-                    <h2 id="tableHeaderTitle" class="font-bold text-slate-900 text-base">Master Referral (Out) View</h2>
-                    <p class="text-xs text-slate-500">Live grid with inline editing and entity rate management.</p>
+            <div class="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+                <div class="flex items-center gap-2">
+                    <h2 id="tableHeaderTitle" class="text-base font-bold text-slate-800">Master Referral (Out) View</h2>
                 </div>
+
                 <div class="flex items-center gap-3 w-full sm:w-auto">
-                    <input type="text" id="searchInput" oninput="window.renderTable()" placeholder="Search test names..." class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-64 bg-slate-50"/>
-                    <button onclick="window.downloadExcelTable()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shadow-sm">Export .XLSX</button>
+                    <input type="text" id="searchInput" oninput="window.renderTable()" placeholder="Search test names..." class="w-full sm:w-64 border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                    <button onclick="window.downloadExcelTable()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-1.5 rounded-lg transition-colors whitespace-nowrap shadow-sm">📥 Export Excel</button>
                 </div>
             </div>
 
-            <div class="overflow-x-auto custom-scrollbar max-h-[500px]">
-                <table class="w-full text-left text-xs">
-                    <thead id="tableHeader"></thead>
-                    <tbody id="tableBody"></tbody>
+            <div class="overflow-x-auto custom-scrollbar max-h-[600px]">
+                <table class="w-full text-xs text-left border-collapse">
+                    <thead id="tableHeader" class="sticky top-0 z-30"></thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-100"></tbody>
                 </table>
             </div>
         </div>
 
     </div>
+
 </body>
 </html>
