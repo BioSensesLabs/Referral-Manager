@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BioSenses Cloud Price Management System</title>
-    <!-- Tailwind CSS CDN (Development Warning Suppressed) -->
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
@@ -12,7 +12,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // BioSenses Live Production Cloud Configuration
+        // BioSenses Production Cloud Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
             authDomain: "lab-referral-pricing.firebaseapp.com",
@@ -27,7 +27,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // State System Variables per Tab
+        // System State Management
         window.activeTab = 'out'; // 'out' or 'in'
 
         window.stateData = {
@@ -45,7 +45,7 @@
             }
         };
 
-        // UI Logger Function
+        // Global UI Logger
         window.logMessage = function(msg, type) {
             const box = document.getElementById('systemLog');
             if (!box) return;
@@ -59,44 +59,64 @@
         };
 
         window.sanitizeCloudKey = function(keyStr) {
-            return keyStr.replace(/[\.\#\$\/\[\]]/g, "-");
+            if (!keyStr) return "";
+            return String(keyStr).replace(/[\.\#\$\/\[\]]/g, "-");
         };
 
-        // Database References for separate tables
+        // Database References
         const refOut = ref(db, 'lab_data/referral_out');
         const refIn = ref(db, 'lab_data/referral_in');
 
-        // Real-time listener for Referral Out
+        // Real-time listener: Referral Out
         onValue(refOut, (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                if (data.entities) window.stateData.out.entities = data.entities;
-                window.stateData.out.testDatabase = data.database || {};
+                if (data.entities && Array.isArray(data.entities) && data.entities.length > 0) {
+                    window.stateData.out.entities = data.entities;
+                }
+                // Handle objects or arrays converted by Firebase
+                if (data.database && typeof data.database === 'object') {
+                    window.stateData.out.testDatabase = data.database;
+                } else {
+                    window.stateData.out.testDatabase = {};
+                }
             } else {
                 window.stateData.out.testDatabase = {};
             }
-            if (window.activeTab === 'out') window.initSystem();
-            window.logMessage("Referral Out synchronized.", "success");
+            
+            if (window.activeTab === 'out' && typeof window.initSystem === 'function') {
+                window.initSystem();
+            }
+            window.logMessage("Referral Out synchronized successfully.", "success");
         }, (error) => {
             window.logMessage("Referral Out Read Error: " + error.message, "error");
         });
 
-        // Real-time listener for Referral In
+        // Real-time listener: Referral In
         onValue(refIn, (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                if (data.entities) window.stateData.in.entities = data.entities;
-                window.stateData.in.testDatabase = data.database || {};
+                if (data.entities && Array.isArray(data.entities) && data.entities.length > 0) {
+                    window.stateData.in.entities = data.entities;
+                }
+                if (data.database && typeof data.database === 'object') {
+                    window.stateData.in.testDatabase = data.database;
+                } else {
+                    window.stateData.in.testDatabase = {};
+                }
             } else {
                 window.stateData.in.testDatabase = {};
             }
-            if (window.activeTab === 'in') window.initSystem();
-            window.logMessage("Referral In synchronized.", "success");
+
+            if (window.activeTab === 'in' && typeof window.initSystem === 'function') {
+                window.initSystem();
+            }
+            window.logMessage("Referral In synchronized successfully.", "success");
         }, (error) => {
             window.logMessage("Referral In Read Error: " + error.message, "error");
         });
 
-        // Sync updates for active tab
+        // Save active tab state to Cloud
         window.syncCloudStorage = function() {
             const currentRef = window.activeTab === 'out' ? refOut : refIn;
             const state = window.stateData[window.activeTab];
@@ -107,11 +127,11 @@
             }).then(() => {
                 window.logMessage(`Cloud broadcast complete for Referral ${window.activeTab.toUpperCase()}.`, "success");
             }).catch((err) => {
-                window.logMessage("Cloud Write Drop Failure: " + err.message, "error");
+                window.logMessage("Cloud Write Failure: " + err.message, "error");
             });
         };
 
-        // Tab Switching
+        // Tab Switcher
         window.switchTab = function(tab) {
             window.activeTab = tab;
             const btnOut = document.getElementById('tabBtnOut');
@@ -148,8 +168,8 @@
             const uploadSection = document.getElementById('uploadSection');
             if (uploadSection) {
                 let statusInfo = Object.keys(state.testDatabase).length > 0 
-                    ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${Object.keys(state.testDatabase).length} tests initialized)</span>`
-                    : '';
+                    ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${Object.keys(state.testDatabase).length} tests loaded)</span>`
+                    : '<span class="text-[10px] text-slate-400 block text-center font-medium mt-1">No active tests in current database node.</span>';
                 
                 uploadSection.className = "bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5";
                 uploadSection.innerHTML = `
@@ -195,7 +215,10 @@
                 btnCreate.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
             }
             document.getElementById('priceForm').reset();
-            state.entities.forEach(ent => document.getElementById(`form-price-${ent}`).value = 0);
+            state.entities.forEach(ent => {
+                const input = document.getElementById(`form-price-${ent}`);
+                if (input) input.value = 0;
+            });
         };
 
         window.bindExcelUploadListener = function() {
@@ -235,7 +258,7 @@
                         }
                         window.syncCloudStorage();
                     } catch (parseError) {
-                        window.logMessage("Fail compilation spreadsheet upload parsing: " + parseError.message, "error");
+                        window.logMessage("Spreadsheet upload parsing failed: " + parseError.message, "error");
                     }
                 };
                 reader.readAsBinaryString(file);
@@ -252,17 +275,21 @@
             if (state.entities.includes(name)) return;
 
             state.entities.push(name);
-            Object.keys(state.testDatabase).forEach(test => { state.testDatabase[test][name] = 0; });
+            Object.keys(state.testDatabase).forEach(test => { 
+                if (state.testDatabase[test]) {
+                    state.testDatabase[test][name] = 0; 
+                }
+            });
             input.value = '';
             window.syncCloudStorage();
         };
 
         window.deleteOperationalEntity = function(entityName) {
-            if (confirm(`🚨 WARNING: Delete the entity column "${entityName}"? This will drop its stored prices permanently.`)) {
+            if (confirm(`🚨 WARNING: Delete entity column "${entityName}"? This drops its saved rates.`)) {
                 const state = window.stateData[window.activeTab];
                 state.entities = state.entities.filter(ent => ent !== entityName);
                 Object.keys(state.testDatabase).forEach(testKey => {
-                    if (state.testDatabase[testKey][entityName] !== undefined) {
+                    if (state.testDatabase[testKey] && state.testDatabase[testKey][entityName] !== undefined) {
                         delete state.testDatabase[testKey][entityName];
                     }
                 });
@@ -272,7 +299,7 @@
 
         window.clearSystemDatabase = function() {
             const tabName = window.activeTab === 'out' ? 'Referral Out' : 'Referral In';
-            if (confirm(`🚨 WARNING: Are you sure you want to reset all database entries for [${tabName}]?`)) {
+            if (confirm(`🚨 WARNING: Are you sure you want to clear all database entries for [${tabName}]?`)) {
                 const state = window.stateData[window.activeTab];
                 state.testDatabase = {};
                 window.syncCloudStorage();
@@ -310,7 +337,10 @@
                 const state = window.stateData[window.activeTab];
                 if (!testName || state.currentInputMode !== 'select') return;
                 state.entities.forEach(ent => {
-                    document.getElementById(`form-price-${ent}`).value = state.testDatabase[testName][ent] || 0;
+                    const el = document.getElementById(`form-price-${ent}`);
+                    if (el && state.testDatabase[testName]) {
+                        el.value = state.testDatabase[testName][ent] || 0;
+                    }
                 });
             }
         });
@@ -331,20 +361,25 @@
             }
 
             state.entities.forEach(ent => {
-                state.testDatabase[testName][ent] = parseFloat(document.getElementById(`form-price-${ent}`).value) || 0;
+                const el = document.getElementById(`form-price-${ent}`);
+                state.testDatabase[testName][ent] = el ? (parseFloat(el.value) || 0) : 0;
             });
 
             window.syncCloudStorage();
             document.getElementById('testTextInput').value = "";
             document.getElementById('priceForm').reset();
-            state.entities.forEach(ent => document.getElementById(`form-price-${ent}`).value = 0);
+            state.entities.forEach(ent => {
+                const el = document.getElementById(`form-price-${ent}`);
+                if (el) el.value = 0;
+            });
         };
 
         window.renderTable = function() {
             const header = document.getElementById('tableHeader');
             const body = document.getElementById('tableBody');
             if (!header || !body) return;
-            const searchStr = document.getElementById('searchInput').value.toLowerCase();
+            const searchInput = document.getElementById('searchInput');
+            const searchStr = searchInput ? searchInput.value.toLowerCase() : "";
             const state = window.stateData[window.activeTab];
 
             let headerHTML = `<tr><th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Test Name</th>`;
@@ -361,16 +396,18 @@
             header.innerHTML = headerHTML;
 
             body.innerHTML = '';
-            const filteredTests = Object.keys(state.testDatabase).filter(test => test.toLowerCase().includes(searchStr)).sort();
+            const allTests = Object.keys(state.testDatabase || {});
+            const filteredTests = allTests.filter(test => test.toLowerCase().includes(searchStr)).sort();
 
             if (filteredTests.length === 0) {
-                body.innerHTML = `<tr><td colspan="${state.entities.length + 2}" class="text-center p-12 text-slate-400 font-medium">No records match current search parameters.</td></tr>`;
+                body.innerHTML = `<tr><td colspan="${state.entities.length + 2}" class="text-center p-12 text-slate-400 font-medium">No records match current parameters.</td></tr>`;
                 return;
             }
 
             filteredTests.forEach(test => {
                 const tr = document.createElement('tr');
                 const isEditing = (state.currentEditingRow === test);
+                const rowData = state.testDatabase[test] || {};
                 
                 tr.className = isEditing 
                     ? "bg-indigo-50/50 border-y-2 border-indigo-400 font-medium transition-colors" 
@@ -388,7 +425,7 @@
                 
                 let pricesArr = [];
                 state.entities.forEach(ent => {
-                    const val = state.testDatabase[test][ent] !== undefined ? parseFloat(state.testDatabase[test][ent]) : 0;
+                    const val = rowData[ent] !== undefined ? parseFloat(rowData[ent]) : 0;
                     pricesArr.push(val);
                 });
 
@@ -397,7 +434,7 @@
                 let allEqual = pricesArr.every(v => v === pricesArr[0]);
 
                 state.entities.forEach(ent => {
-                    const price = state.testDatabase[test][ent] !== undefined ? parseFloat(state.testDatabase[test][ent]) : 0;
+                    const price = rowData[ent] !== undefined ? parseFloat(rowData[ent]) : 0;
                     
                     let cellBgClass = "";
                     if (!allEqual && !isEditing) {
@@ -473,7 +510,7 @@
         };
 
         window.handleDeleteClick = function(testName) {
-            if (confirm(`Delete record signature configuration targets permanently for: "${testName}"?`)) {
+            if (confirm(`Delete test entry permanently: "${testName}"?`)) {
                 const state = window.stateData[window.activeTab];
                 delete state.testDatabase[testName];
                 if (state.currentEditingRow === testName) state.currentEditingRow = null;
@@ -495,6 +532,11 @@
             XLSX.utils.book_append_sheet(workbook, worksheet, `Referral_${window.activeTab.toUpperCase()}`);
             XLSX.writeFile(workbook, `BioSenses_Pricing_Master_${window.activeTab.toUpperCase()}_${new Date().toISOString().slice(0,10)}.xlsx`);
         };
+
+        // DOM Lifecycle Safeguard Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            window.initSystem();
+        });
     </script>
 
     <style>
@@ -510,7 +552,6 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-20 items-center">
                 <div class="flex items-center gap-4">
-                    <!-- Text Fallback Avatar used if logo-04.jpg isn't available in GitHub Pages root -->
                     <div class="h-12 w-12 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-inner">BS</div>
                     <div class="border-l border-slate-200 pl-4">
                         <h1 class="text-xl font-bold text-slate-900 tracking-tight">BioSenses Portal</h1>
