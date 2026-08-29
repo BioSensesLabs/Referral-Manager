@@ -35,6 +35,7 @@
 
         // System State Management
         window.activeTab = 'out'; // 'out' or 'in'
+        window.dataLoaded = { out: false, in: false };
 
         window.stateData = {
             out: {
@@ -73,24 +74,34 @@
         const refOut = ref(db, 'lab_data/referral_out');
         const refIn = ref(db, 'lab_data/referral_in');
 
+        // Helper: Normalizes Firebase snapshot tree into clean testDatabase object
+        function extractDatabaseNode(rawSnapshotData) {
+            if (!rawSnapshotData || typeof rawSnapshotData !== 'object') return {};
+            
+            let rawTree = rawSnapshotData.database ? rawSnapshotData.database : rawSnapshotData;
+            let cleanDb = {};
+
+            Object.keys(rawTree).forEach(key => {
+                if (key === 'entities') return;
+                const val = rawTree[key];
+                if (typeof val === 'object' && val !== null) {
+                    cleanDb[key] = val;
+                }
+            });
+
+            return cleanDb;
+        }
+
         // Real-time listener: Referral Out
         onValue(refOut, (snapshot) => {
             const data = snapshot.val();
+            window.dataLoaded.out = true;
+
             if (data) {
                 if (data.entities && Array.isArray(data.entities) && data.entities.length > 0) {
                     window.stateData.out.entities = data.entities;
                 }
-                
-                // Adaptive data extraction (supports nested database property or flat structure)
-                if (data.database && typeof data.database === 'object') {
-                    window.stateData.out.testDatabase = data.database;
-                } else if (typeof data === 'object') {
-                    const testCopy = { ...data };
-                    delete testCopy.entities;
-                    window.stateData.out.testDatabase = testCopy;
-                } else {
-                    window.stateData.out.testDatabase = {};
-                }
+                window.stateData.out.testDatabase = extractDatabaseNode(data);
             } else {
                 window.stateData.out.testDatabase = {};
             }
@@ -101,27 +112,20 @@
             const count = Object.keys(window.stateData.out.testDatabase).length;
             window.logMessage(`Referral Out synchronized. ${count} test(s) loaded.`, "success");
         }, (error) => {
+            window.dataLoaded.out = true;
             window.logMessage("Referral Out Read Error: " + error.message, "error");
         });
 
         // Real-time listener: Referral In
         onValue(refIn, (snapshot) => {
             const data = snapshot.val();
+            window.dataLoaded.in = true;
+
             if (data) {
                 if (data.entities && Array.isArray(data.entities) && data.entities.length > 0) {
                     window.stateData.in.entities = data.entities;
                 }
-
-                // Adaptive data extraction (supports nested database property or flat structure)
-                if (data.database && typeof data.database === 'object') {
-                    window.stateData.in.testDatabase = data.database;
-                } else if (typeof data === 'object') {
-                    const testCopy = { ...data };
-                    delete testCopy.entities;
-                    window.stateData.in.testDatabase = testCopy;
-                } else {
-                    window.stateData.in.testDatabase = {};
-                }
+                window.stateData.in.testDatabase = extractDatabaseNode(data);
             } else {
                 window.stateData.in.testDatabase = {};
             }
@@ -132,6 +136,7 @@
             const count = Object.keys(window.stateData.in.testDatabase).length;
             window.logMessage(`Referral In synchronized. ${count} test(s) loaded.`, "success");
         }, (error) => {
+            window.dataLoaded.in = true;
             window.logMessage("Referral In Read Error: " + error.message, "error");
         });
 
@@ -404,7 +409,7 @@
             const body = document.getElementById('tableBody');
             if (!header || !body) return;
             const searchInput = document.getElementById('searchInput');
-            const searchStr = searchInput ? searchInput.value.toLowerCase() : "";
+            const searchStr = searchInput ? searchInput.value.toLowerCase().trim() : "";
             const state = window.stateData[window.activeTab];
 
             let headerHTML = `<tr><th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b text-left">Test Name</th>`;
@@ -421,6 +426,13 @@
             header.innerHTML = headerHTML;
 
             body.innerHTML = '';
+            
+            // Check if Firebase fetch has resolved
+            if (!window.dataLoaded[window.activeTab]) {
+                body.innerHTML = `<tr><td colspan="${state.entities.length + 2}" class="text-center p-12 text-slate-400 font-medium animate-pulse">Fetching cloud database records...</td></tr>`;
+                return;
+            }
+
             const allTests = Object.keys(state.testDatabase || {});
             const filteredTests = allTests.filter(test => test.toLowerCase().includes(searchStr)).sort();
 
