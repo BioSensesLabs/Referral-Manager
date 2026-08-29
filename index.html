@@ -72,7 +72,7 @@
         };
 
         // Realtime Sync: Referral Out Node (lab_data_out)
-        const refOut = ref(db, 'lab_data_out');
+        const refOut = ref(db, 'BioSensesReferralOut');
         onValue(refOut, (snapshot) => {
             const data = snapshot.val();
             if (data) {
@@ -90,7 +90,7 @@
         });
 
         // Realtime Sync: Referral In Node (lab_data_in)
-        const refIn = ref(db, 'lab_data_in');
+        const refIn = ref(db, 'Lab-Referral-Pricing');
         onValue(refIn, (snapshot) => {
             const data = snapshot.val();
             if (data) {
