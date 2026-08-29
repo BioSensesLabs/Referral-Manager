@@ -1,263 +1,578 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Referral Manager</title>
-  
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>">
-  
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioSenses Cloud Price Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // BioSenses Live Production Cloud Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
+            authDomain: "lab-referral-pricing.firebaseapp.com",
+            databaseURL: "https://lab-referral-pricing-default-rtdb.firebaseio.com",
+            projectId: "lab-referral-pricing",
+            storageBucket: "lab-referral-pricing.firebasestorage.app",
+            messagingSenderId: "230114183546",
+            appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
+        };
+
+        // Initialize Firebase Connection Nodes
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const dbRef = ref(db, 'lab_data');
+
+        // Global State System Variables
+        window.entities = ['Medlab', 'MedScale', 'GLab', 'Alpha', 'Sultan', 'Smart'];
+        window.testDatabase = {}; 
+        window.currentEditingRow = null; 
+        window.currentInputMode = 'select';
+
+        // Listen for Real-time changes across ALL connected devices
+        onValue(dbRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                if (data.entities) window.entities = data.entities;
+                window.testDatabase = data.database || {};
+            } else {
+                window.testDatabase = {};
+            }
+            logMessage("Cloud synced. Database loaded successfully across connected nodes.", "success");
+            initSystem();
+        }, (error) => {
+            logMessage("Cloud Read Database Failure: " + error.message, "error");
+        });
+
+        // Push updates up to Firebase Cloud Node
+        window.syncCloudStorage = function() {
+            set(dbRef, {
+                entities: window.entities,
+                database: window.testDatabase
+            }).then(() => {
+                logMessage("Cloud broadcast complete. Synchronization applied.", "success");
+            }).catch((err) => {
+                logMessage("Cloud Write Drop Failure: " + err.message, "error");
+            });
+        }
+    </script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
 </head>
-<body class="bg-slate-100 text-slate-800 min-h-screen">
+<body class="bg-slate-50 min-h-screen font-sans pb-16 antialiased">
 
-  <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
-    <div class="flex items-center space-x-3">
-      <img 
-        src="logo-04.jpg" 
-        alt="Logo" 
-        class="h-8 w-auto object-contain"
-        onerror="this.style.display='none'; document.getElementById('brand-fallback').classList.remove('hidden');"
-      />
-      <span id="brand-fallback" class="hidden text-xl font-bold text-indigo-600">Biosenses Labs</span>
-      <h1 class="text-lg font-semibold text-slate-700 border-l pl-3 border-slate-300">Referral Manager</h1>
-    </div>
-    <div class="flex items-center space-x-2">
-      <span id="connection-status" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-        Connecting...
-      </span>
-    </div>
-  </header>
-
-  <div class="max-w-6xl mx-auto px-6 pt-6">
-    <div class="border-b border-slate-200">
-      <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-        <button 
-          id="tab-btn-list" 
-          onclick="switchTab('list')"
-          class="border-indigo-500 text-indigo-600 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center space-x-2">
-          <span>📋 Referrals List</span>
-          <span id="record-count" class="bg-indigo-100 text-indigo-600 text-xs px-2 py-0.5 rounded-full">0</span>
-        </button>
-        <button 
-          id="tab-btn-form" 
-          onclick="switchTab('form')"
-          class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">
-          <span>➕ Add New Referral</span>
-        </button>
-      </nav>
-    </div>
-  </div>
-
-  <main class="max-w-6xl mx-auto p-6 space-y-6">
-    
-    <section id="tab-content-list" class="space-y-4">
-      <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-md font-semibold text-slate-900">Synchronized Referrals</h2>
-          <input type="text" id="search-input" onkeyup="filterData()" placeholder="Search records..." class="px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64">
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-20 items-center">
+                <div class="flex items-center gap-4">
+                    <img src="logo-04.jpg" alt="BioSenses Logo" class="h-14 w-auto object-contain">
+                    <div class="border-l border-slate-200 pl-4">
+                        <h1 class="text-xl font-bold text-slate-900 tracking-tight">BioSenses Portal</h1>
+                        <p class="text-xs text-indigo-600 font-semibold tracking-wide uppercase">Real-Time Sync Infrastructure</p>
+                    </div>
+                </div>
+                <button onclick="clearSystemDatabase()" class="bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold px-4 py-2 rounded-lg border border-rose-200 transition-colors shadow-sm">
+                    ⚠ Reset Cloud Database
+                </button>
+            </div>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 font-medium">
-                <th class="py-3 px-4">Record ID</th>
-                <th class="py-3 px-4">Referral Name</th>
-                <th class="py-3 px-4">Category / Package</th>
-                <th class="py-3 px-4">Date Added</th>
-              </tr>
-            </thead>
-            <tbody id="referral-table-body" class="divide-y divide-slate-100">
-              <tr>
-                <td colspan="4" class="py-6 text-center text-slate-400 italic">Connecting to cloud database...</td>
-              </tr>
-            </tbody>
-          </table>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 space-y-6">
+        
+        <div id="systemLog" class="p-4 rounded-xl text-xs font-mono shadow-sm border border-slate-200 transition-all duration-300 bg-amber-50 text-amber-800 border-amber-200">Connecting to cloud synchronization engine...</div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Active Tests</p>
+                    <h3 id="statTests" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+                </div>
+                <div class="bg-indigo-50 text-indigo-600 p-3 rounded-lg font-bold text-lg">🧪</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Managed Labs</p>
+                    <h3 id="statEntities" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+                </div>
+                <div class="bg-emerald-50 text-emerald-600 p-3 rounded-lg font-bold text-lg">🏢</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Network Cluster Status</p>
+                    <h3 class="text-lg font-bold text-emerald-600 mt-1 flex items-center gap-1">🟢 Connected</h3>
+                </div>
+                <div class="bg-amber-50 text-amber-600 p-3 rounded-lg font-bold text-lg">☁</div>
+            </div>
         </div>
-      </div>
-    </section>
 
-    <section id="tab-content-form" class="hidden space-y-4">
-      <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200 max-w-xl mx-auto">
-        <h2 class="text-md font-semibold text-slate-900 mb-4">Add Referral Record</h2>
-        <form id="referral-form" class="space-y-4">
-          <div>
-            <label class="block text-xs font-medium text-slate-600 uppercase mb-1">Referral Name</label>
-            <input type="text" id="ref-name" required class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Jane Doe" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-600 uppercase mb-1">Category / Service</label>
-            <input type="text" id="ref-category" required class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Diagnostic Package" />
-          </div>
-          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md text-sm transition-colors">
-            Save Record
-          </button>
-        </form>
-      </div>
-    </section>
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+            <div class="flex flex-col md:flex-row gap-6 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                
+                <div class="flex-1 space-y-4">
+                    <div>
+                        <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">System Provisioning</h2>
+                        <p class="text-xs text-slate-400">Initialize baseline matrix spreadsheets or add operational lab entities.</p>
+                    </div>
+                    <div id="uploadSection" class="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5"></div>
+                    <div class="flex gap-2">
+                        <input id="newEntityInput" type="text" placeholder="Add a new lab..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
+                        <button onclick="addNewEntity()" class="bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shrink-0 shadow-sm">
+                            + Add New Lab
+                        </button>
+                    </div>
+                </div>
 
-    <div class="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-xs">
-      <div class="flex justify-between items-center mb-2 pb-1 border-b border-slate-800">
-        <span class="font-bold text-slate-400 uppercase">System Sync Console</span>
-        <button id="clear-log" class="text-slate-500 hover:text-slate-300">Clear Log</button>
-      </div>
-      <div id="console-output" class="h-28 overflow-y-auto space-y-1 text-slate-300"></div>
+                <div class="flex-[2] md:pl-6 space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Test Pricing Manager Matrix</h2>
+                            <p class="text-xs text-slate-400">Select an existing element or spawn custom text entries.</p>
+                        </div>
+                        <div class="inline-flex rounded-md shadow-sm bg-slate-100 p-0.5 border text-xs font-semibold">
+                            <button type="button" id="modeSelectBtn" onclick="toggleTestInputMode('select')" class="bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all">Select Existing Test</button>
+                            <button type="button" id="modeCreateBtn" onclick="toggleTestInputMode('create')" class="text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all">+ Create New Test</button>
+                        </div>
+                    </div>
+
+                    <form id="priceForm" onsubmit="saveFormPrice(event)" class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                            <div class="sm:col-span-1" id="testSelectionWrapper">
+                                <label id="testInputLabel" class="block text-xs font-semibold text-slate-500 mb-1">Target Test</label>
+                                <select id="testDropdown" class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-slate-50/50 outline-none focus:ring-2 focus:ring-indigo-500" required>
+                                    <option value="">-- Choose a test --</option>
+                                </select>
+                                <input id="testTextInput" type="text" placeholder="Enter new test name..." class="hidden w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
+                            </div>
+                            <div id="dynamicFormPrices" class="sm:col-span-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-24 overflow-y-auto pr-1"></div>
+                        </div>
+                        <div class="flex justify-end">
+                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm px-6 py-2 rounded-lg transition shadow-md shadow-indigo-100">
+                                Apply Referral Prices
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900">Master Referral and Pricing View</h2>
+                    <p class="text-xs text-slate-400">Review structural rates matrices. Real-time updates active.</p>
+                </div>
+                <div class="flex gap-2 w-full sm:w-auto items-center justify-end">
+                    <div class="relative w-full sm:w-72">
+                        <input id="searchInput" type="text" oninput="renderTable()" placeholder="🔍 search test..." class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                    </div>
+                    <button onclick="downloadExcelTable()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
+                        📥 Download Excel
+                    </button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto max-h-[550px] overflow-y-auto custom-scrollbar relative">
+                <table class="min-w-full divide-y divide-slate-200 text-xs text-left table-fixed border-collapse">
+                    <thead id="tableHeader" class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wider sticky top-0 bg-white z-30 border-b border-slate-200 shadow-sm"></thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-100 text-slate-600"></tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
-  </main>
 
-  <script>
-    function switchTab(tabName) {
-      const listTab = document.getElementById('tab-content-list');
-      const formTab = document.getElementById('tab-content-form');
-      const btnList = document.getElementById('tab-btn-list');
-      const btnForm = document.getElementById('tab-btn-form');
+    <script>
+        function logMessage(msg, type) {
+            const box = document.getElementById('systemLog');
+            if(!box) return;
+            box.className = "p-4 rounded-xl text-xs font-mono shadow-sm border transition-all duration-300";
+            if (type === "error") {
+                box.classList.add('bg-rose-50', 'text-rose-700', 'border-rose-200');
+            } else {
+                box.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+            }
+            box.innerText = "[" + new Date().toLocaleTimeString() + "] " + msg;
+        }
 
-      if (tabName === 'list') {
-        listTab.classList.remove('hidden');
-        formTab.classList.add('hidden');
-        btnList.className = "border-indigo-500 text-indigo-600 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center space-x-2";
-        btnForm.className = "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm";
-      } else {
-        formTab.classList.remove('hidden');
-        listTab.classList.add('hidden');
-        btnForm.className = "border-indigo-500 text-indigo-600 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm";
-        btnList.className = "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center space-x-2";
-      }
-    }
+        function sanitizeCloudKey(keyStr) {
+            return keyStr.replace(/[\.\#\$\/\[\]]/g, "-");
+        }
 
-    let globalDataset = [];
+        // Safety verification logic preventing spaces or reserved keys in key arrays
+        function validateNameChange(oldName, newName) {
+            if (!newName || newName.trim() === "") return { valid: false, msg: "Test name cannot be empty." };
+            let sanitized = sanitizeCloudKey(newName.trim());
+            if (sanitized !== oldName && window.testDatabase[sanitized]) {
+                return { valid: false, msg: "A test with this name already exists." };
+            }
+            return { valid: true, sanitized: sanitized };
+        }
 
-    function renderTable(data) {
-      const tableBody = document.getElementById('referral-table-body');
-      const countBadge = document.getElementById('record-count');
-      tableBody.innerHTML = '';
-      
-      if (!data || data.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-slate-400 italic">No referral records found.</td></tr>`;
-        countBadge.textContent = '0';
-        return;
-      }
+        function initSystem() {
+            const uploadSection = document.getElementById('uploadSection');
+            if(uploadSection) {
+                let statusInfo = Object.keys(window.testDatabase).length > 0 
+                    ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${Object.keys(window.testDatabase).length} tests initialized)</span>`
+                    : '';
+                
+                uploadSection.className = "bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5";
+                uploadSection.innerHTML = `
+                    <label class="block flex flex-col cursor-pointer gap-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-slate-500 font-medium">Upload Master Sheet (.xlsx):</span>
+                            <input type="file" id="excelFile" accept=".xlsx, .xls" class="text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"/>
+                        </div>
+                        ${statusInfo}
+                    </label>
+                `;
+                bindExcelUploadListener();
+            }
 
-      countBadge.textContent = data.length;
+            document.getElementById('statTests').innerText = Object.keys(window.testDatabase).length.toLocaleString();
+            document.getElementById('statEntities').innerText = window.entities.length.toLocaleString();
 
-      data.forEach(item => {
-        const dateStr = item.timestamp ? new Date(item.timestamp).toLocaleDateString() : 'N/A';
-        const row = document.createElement('tr');
-        row.className = "hover:bg-slate-50 transition-colors";
-        row.innerHTML = `
-          <td class="py-3 px-4 font-mono text-xs text-slate-500">${item.id.substring(0, 8)}...</td>
-          <td class="py-3 px-4 font-medium text-slate-800">${item.name || 'N/A'}</td>
-          <td class="py-3 px-4 text-slate-600">${item.category || 'N/A'}</td>
-          <td class="py-3 px-4 text-slate-400 text-xs">${dateStr}</td>
-        `;
-        tableBody.appendChild(row);
-      });
-    }
+            renderDropdown();
+            renderFormFields();
+            renderTable();
+        }
 
-    function filterData() {
-      const query = document.getElementById('search-input').value.toLowerCase();
-      const filtered = globalDataset.filter(item => 
-        (item.name && item.name.toLowerCase().includes(query)) ||
-        (item.category && item.category.toLowerCase().includes(query))
-      );
-      renderTable(filtered);
-    }
-  </script>
+        function toggleTestInputMode(mode) {
+            window.currentInputMode = mode;
+            const dropEl = document.getElementById('testDropdown');
+            const textEl = document.getElementById('testTextInput');
+            const lblEl = document.getElementById('testInputLabel');
+            const btnSelect = document.getElementById('modeSelectBtn');
+            const btnCreate = document.getElementById('modeCreateBtn');
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getDatabase, ref, onValue, push, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+            if (mode === 'create') {
+                dropEl.classList.add('hidden'); dropEl.removeAttribute('required');
+                textEl.classList.remove('hidden'); textEl.setAttribute('required', 'true');
+                lblEl.innerText = "New Test Name";
+                btnCreate.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
+                btnSelect.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
+            } else {
+                textEl.classList.add('hidden'); textEl.removeAttribute('required');
+                dropEl.classList.remove('hidden'); dropEl.setAttribute('required', 'true');
+                lblEl.innerText = "Target Test";
+                btnSelect.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
+                btnCreate.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
+            }
+            document.getElementById('priceForm').reset();
+            window.entities.forEach(ent => document.getElementById(`form-price-${ent}`).value = 0);
+        }
 
-    window.logMessage = function(msg, level = 'info') {
-      const output = document.getElementById('console-output');
-      if (!output) return;
-      
-      const time = new Date().toISOString().substring(11, 19);
-      const entry = document.createElement('div');
-      
-      if (level === 'error') entry.className = 'text-rose-400';
-      else if (level === 'warn') entry.className = 'text-amber-400';
-      else entry.className = 'text-emerald-400';
+        function bindExcelUploadListener() {
+            const fileInput = document.getElementById('excelFile');
+            if(!fileInput) return;
+            
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
 
-      entry.textContent = `[${time}] ${msg}`;
-      output.appendChild(entry);
-      output.scrollTop = output.scrollHeight;
-      
-      console.log(`[${level.toUpperCase()}] ${msg}`);
-    };
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const data = evt.target.result;
+                        const workbook = XLSX.read(data, { type: 'binary' });
+                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        
+                        if (rawRows.length <= 1) return;
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
-      authDomain: "lab-referral-pricing.firebaseapp.com",
-      databaseURL: "https://lab-referral-pricing-default-rtdb.firebaseio.com",
-      projectId: "lab-referral-pricing",
-      storageBucket: "lab-referral-pricing.firebasestorage.app",
-      messagingSenderId: "230114183546",
-      appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
-    };
+                        for (let i = 1; i < rawRows.length; i++) {
+                            const row = rawRows[i];
+                            if (!row || row.length === 0) continue;
+                            let rawTestName = row[0] ? String(row[0]).trim() : "";
+                            let basePrice = row[1] ? parseFloat(row[1]) : 0;
 
-    let app, db;
-    try {
-      app = initializeApp(firebaseConfig);
-      db = getDatabase(app);
-      
-      const statusBadge = document.getElementById('connection-status');
-      statusBadge.textContent = 'Connected';
-      statusBadge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800';
-      
-      logMessage("Connected to cloud database engine successfully.");
-    } catch (err) {
-      logMessage(`Initialization failed: ${err.message}`, 'error');
-    }
+                            if (rawTestName && rawTestName !== "undefined" && rawTestName !== "") {
+                                let testName = sanitizeCloudKey(rawTestName);
 
-    const referralsRef = ref(db, 'referrals');
-    
-    // Listen for database updates & render dynamically
-    onValue(referralsRef, (snapshot) => {
-      logMessage("Database snapshot received.");
-      const rawData = snapshot.val();
-      
-      if (!rawData) {
-        window.globalDataset = [];
-        window.renderTable([]);
-        return;
-      }
+                                if (!window.testDatabase[testName]) {
+                                    window.testDatabase[testName] = {};
+                                    window.entities.forEach(ent => window.testDatabase[testName][ent] = 0);
+                                }
+                                window.testDatabase[testName]['Medlab'] = isNaN(basePrice) ? 0 : basePrice;
+                            }
+                        }
+                        window.syncCloudStorage();
+                    } catch (parseError) {
+                        logMessage("Fail compilation spreadsheet upload parsing: " + parseError.message, "error");
+                    }
+                };
+                reader.readAsBinaryString(file);
+            });
+        }
 
-      // Format snapshot data into array
-      window.globalDataset = Object.keys(rawData).map(key => ({
-        id: key,
-        ...rawData[key]
-      }));
+        function addNewEntity() {
+            const input = document.getElementById('newEntityInput');
+            let rawName = input.value.trim();
+            if(!rawName) return;
 
-      window.renderTable(window.globalDataset);
-    }, (error) => {
-      logMessage(`Database error: ${error.message}`, 'error');
-    });
+            let name = sanitizeCloudKey(rawName);
+            if(window.entities.includes(name)) return;
 
-    // Handle Form Submit
-    document.getElementById('referral-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const nameInput = document.getElementById('ref-name');
-      const categoryInput = document.getElementById('ref-category');
+            window.entities.push(name);
+            Object.keys(window.testDatabase).forEach(test => { window.testDatabase[test][name] = 0; });
+            input.value = '';
+            window.syncCloudStorage();
+        }
 
-      const newRef = push(referralsRef);
-      set(newRef, {
-        name: nameInput.value,
-        category: categoryInput.value,
-        timestamp: Date.now()
-      }).then(() => {
-        logMessage(`Record added: ${nameInput.value}`);
-        nameInput.value = '';
-        categoryInput.value = '';
-        switchTab('list'); // Switch back to list tab on successful submit
-      }).catch((err) => {
-        logMessage(`Failed to save: ${err.message}`, 'error');
-      });
-    });
+        window.deleteOperationalEntity = function(entityName) {
+            if (confirm(`🚨 WARNING: Delete the entity column "${entityName}"? This will drop its stored prices permanently.`)) {
+                window.entities = window.entities.filter(ent => ent !== entityName);
+                Object.keys(window.testDatabase).forEach(testKey => {
+                    if (window.testDatabase[testKey][entityName] !== undefined) {
+                        delete window.testDatabase[testKey][entityName];
+                    }
+                });
+                window.syncCloudStorage();
+            }
+        }
 
-    document.getElementById('clear-log').addEventListener('click', () => {
-      document.getElementById('console-output').innerHTML = '';
-    });
-  </script>
+        function renderDropdown() {
+            const dropdown = document.getElementById('testDropdown');
+            if(!dropdown) return;
+            dropdown.innerHTML = '<option value="">-- Choose a test --</option>';
+            Object.keys(window.testDatabase).sort().forEach(test => {
+                const opt = document.createElement('option'); opt.value = test; opt.textContent = test;
+                dropdown.appendChild(opt);
+            });
+        }
+
+        function renderFormFields() {
+            const container = document.getElementById('dynamicFormPrices');
+            if(!container) return;
+            container.innerHTML = '';
+            window.entities.forEach(ent => {
+                container.innerHTML += `
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-tight mb-0.5">${ent}</label>
+                        <input type="number" step="0.01" id="form-price-${ent}" value="0" class="w-full border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-mono bg-white">
+                    </div>`;
+            });
+        }
+
+        document.body.addEventListener('change', function(e) {
+            if(e.target && e.target.id === 'testDropdown') {
+                const testName = e.target.value;
+                if(!testName || window.currentInputMode !== 'select') return;
+                window.entities.forEach(ent => {
+                    document.getElementById(`form-price-${ent}`).value = window.testDatabase[testName][ent] || 0;
+                });
+            }
+        });
+
+        function saveFormPrice(e) {
+            e.preventDefault();
+            let rawTestName = window.currentInputMode === 'create' 
+                ? document.getElementById('testTextInput').value.trim() 
+                : document.getElementById('testDropdown').value;
+
+            if(!rawTestName) return;
+            let testName = sanitizeCloudKey(rawTestName);
+
+            if (!window.testDatabase[testName]) {
+                window.testDatabase[testName] = {};
+                window.entities.forEach(ent => window.testDatabase[testName][ent] = 0);
+            }
+
+            window.entities.forEach(ent => {
+                window.testDatabase[testName][ent] = parseFloat(document.getElementById(`form-price-${ent}`).value) || 0;
+            });
+
+            window.syncCloudStorage();
+            document.getElementById('testTextInput').value = "";
+            document.getElementById('priceForm').reset();
+            window.entities.forEach(ent => document.getElementById(`form-price-${ent}`).value = 0);
+        }
+
+        function renderTable() {
+            const header = document.getElementById('tableHeader');
+            const body = document.getElementById('tableBody');
+            if(!header || !body) return;
+            const searchStr = document.getElementById('searchInput').value.toLowerCase();
+
+            let headerHTML = `<tr><th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Test Name</th>`;
+            window.entities.forEach(ent => { 
+                headerHTML += `
+                    <th class="px-2 py-3 w-28 text-slate-700 font-bold border-b bg-slate-50">
+                        <div class="flex items-center gap-1 justify-between">
+                            <span class="truncate" title="${ent}">${ent}</span>
+                            <button onclick="window.deleteOperationalEntity('${ent}')" class="text-slate-300 hover:text-rose-600 text-[9px] p-0.5 rounded transition-colors" title="Delete Entity">❌</button>
+                        </div>
+                    </th>`; 
+            });
+            headerHTML += `<th class="px-3 py-3 w-36 text-center text-slate-700 font-bold sticky right-0 bg-slate-50 border-b z-20 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">Actions</th></tr>`;
+            header.innerHTML = headerHTML;
+
+            body.innerHTML = '';
+            const filteredTests = Object.keys(window.testDatabase).filter(test => test.toLowerCase().includes(searchStr)).sort();
+
+            if(filteredTests.length === 0) {
+                body.innerHTML = `<tr><td colspan="${window.entities.length + 2}" class="text-center p-12 text-slate-400 font-medium">No records match current search parameters.</td></tr>`;
+                return;
+            }
+
+            filteredTests.forEach(test => {
+                const tr = document.createElement('tr');
+                const isEditing = (window.currentEditingRow === test);
+                
+                tr.className = isEditing 
+                    ? "bg-indigo-50/50 border-y-2 border-indigo-400 font-medium transition-colors" 
+                    : "hover:bg-slate-50/80 transition-colors border-b border-slate-100 bg-white";
+
+                // Cell 1: Conditional text field modification allowing input when inline modification status is active
+                let rowHTML = "";
+                if (isEditing) {
+                    rowHTML += `
+                    <td class="px-2 py-1.5 sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">
+                        <input type="text" value="${test}" id="inline-edit-testname" class="w-full border border-indigo-400 rounded px-2 py-1 text-xs font-semibold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500">
+                    </td>`;
+                } else {
+                    rowHTML += `<td class="px-3 py-2 font-semibold text-slate-900 break-words sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">${test}</td>`;
+                }
+                
+                let pricesArr = [];
+                window.entities.forEach(ent => {
+                    const val = window.testDatabase[test][ent] !== undefined ? parseFloat(window.testDatabase[test][ent]) : 0;
+                    pricesArr.push(val);
+                });
+
+                let minVal = Math.min(...pricesArr);
+                let maxVal = Math.max(...pricesArr);
+                let allEqual = pricesArr.every(v => v === pricesArr[0]);
+
+                window.entities.forEach(ent => {
+                    const price = window.testDatabase[test][ent] !== undefined ? parseFloat(window.testDatabase[test][ent]) : 0;
+                    
+                    let cellBgClass = "";
+                    if (!allEqual && !isEditing) {
+                        if (price === minVal) cellBgClass = "bg-emerald-100 text-emerald-900 font-bold rounded-xs shadow-xs";
+                        else if (price === maxVal) cellBgClass = "bg-rose-100 text-rose-900 font-bold rounded-xs shadow-xs";
+                    }
+
+                    rowHTML += isEditing 
+                        ? `<td class="px-1.5 py-1.5"><input type="number" step="0.01" value="${price}" id="inline-edit-${ent}" class="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-xs font-mono font-bold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500"></td>`
+                        : `<td class="px-2 py-2 font-mono text-slate-600 transition-colors ${cellBgClass}">${Number(price).toFixed(2)}</td>`;
+                });
+                
+                tr.innerHTML = rowHTML;
+
+                const tdActions = document.createElement('td');
+                tdActions.className = "px-3 py-2 text-center space-x-1.5 whitespace-nowrap sticky right-0 bg-inherit z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] border-l border-slate-100";
+
+                if (isEditing) {
+                    const saveBtn = document.createElement('button');
+                    saveBtn.className = "bg-indigo-600 text-white hover:bg-indigo-700 px-2 py-1 text-[10px] font-bold rounded shadow-sm transition-colors";
+                    saveBtn.innerText = "Save"; saveBtn.dataset.oldTestName = test;
+                    saveBtn.addEventListener('click', function() { saveInlineRowChanges(this.dataset.oldTestName); });
+
+                    const cancelBtn = document.createElement('button');
+                    cancelBtn.className = "bg-slate-200 text-slate-700 hover:bg-slate-300 px-2 py-1 text-[10px] font-bold rounded transition-colors";
+                    cancelBtn.innerText = "Cancel";
+                    cancelBtn.addEventListener('click', function() { window.currentEditingRow = null; renderTable(); });
+
+                    tdActions.appendChild(saveBtn); tdActions.appendChild(cancelBtn);
+                } else {
+                    const editBtn = document.createElement('button');
+                    editBtn.className = "text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 px-2 py-0.5 rounded text-[11px] font-bold transition-all";
+                    editBtn.innerText = "Edit"; editBtn.dataset.testName = test;
+                    editBtn.addEventListener('click', function() { window.currentEditingRow = this.dataset.testName; renderTable(); });
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = "text-rose-600 hover:text-rose-900 hover:bg-rose-50 border border-transparent hover:border-rose-100 px-2 py-0.5 rounded text-[11px] font-bold transition-all";
+                    deleteBtn.innerText = "Delete"; deleteBtn.dataset.testName = test;
+                    deleteBtn.addEventListener('click', function() { handleDeleteClick(this.dataset.testName); });
+
+                    tdActions.appendChild(editBtn); tdActions.appendChild(deleteBtn);
+                }
+                tr.appendChild(tdActions); body.appendChild(tr);
+            });
+        }
+
+        function saveInlineRowChanges(oldTestName) {
+            const nameField = document.getElementById('inline-edit-testname');
+            if(!nameField) return;
+
+            let check = validateNameChange(oldTestName, nameField.value);
+            if(!check.valid) {
+                alert(check.msg);
+                return;
+            }
+
+            let newSanitizedName = check.sanitized;
+            let targetRowData = {};
+
+            // Collect all current price variables inside row matrix
+            window.entities.forEach(ent => {
+                const el = document.getElementById(`inline-edit-${ent}`);
+                if (el) targetRowData[ent] = parseFloat(el.value) || 0;
+            });
+
+            // If the name actually changed, clear old registry block path key signatures
+            if(oldTestName !== newSanitizedName) {
+                delete window.testDatabase[oldTestName];
+            }
+
+            // Bind updated array structures
+            window.testDatabase[newSanitizedName] = targetRowData;
+            
+            window.currentEditingRow = null;
+            window.syncCloudStorage();
+        }
+
+        function handleDeleteClick(testName) {
+            if(confirm(`Delete record signature configuration targets permanently for: "${testName}"?`)) {
+                delete window.testDatabase[testName];
+                if(window.currentEditingRow === testName) window.currentEditingRow = null;
+                window.syncCloudStorage();
+            }
+        }
+
+        function downloadExcelTable() {
+            if (Object.keys(window.testDatabase).length === 0) return;
+            const excelRows = [["Test Name", ...window.entities]];
+            Object.keys(window.testDatabase).sort().forEach(testName => {
+                const dataRow = [testName];
+                window.entities.forEach(ent => { dataRow.push(window.testDatabase[testName][ent] || 0); });
+                excelRows.push(dataRow);
+            });
+            const worksheet = XLSX.utils.aoa_to_sheet(excelRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Pricing Matrix");
+            XLSX.writeFile(workbook, `BioSenses_Pricing_Master_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+
+        function clearSystemDatabase() {
+            if (confirm("🚨 DESTUCTIVE CLEAR WARNING: Wipe the entire cloud database node clean completely?")) {
+                window.testDatabase = {};
+                window.entities = ['Medlab', 'MedScale', 'GLab', 'Alpha', 'Sultan', 'Smart'];
+                window.currentEditingRow = null;
+                window.syncCloudStorage();
+            }
+        }
+    </script>
 </body>
 </html>
+
