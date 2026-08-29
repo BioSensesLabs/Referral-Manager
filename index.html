@@ -8,7 +8,7 @@
     <!-- Standalone Production CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" />
     
-    <!-- Inline SVG Favicon to eliminate 404 Console Errors -->
+    <!-- Inline SVG Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>">
 
     <!-- Excel Export/Import Library -->
@@ -80,8 +80,14 @@
                 if (data.entities && Array.isArray(data.entities) && data.entities.length > 0) {
                     window.stateData.out.entities = data.entities;
                 }
+                
+                // Adaptive data extraction (supports nested database property or flat structure)
                 if (data.database && typeof data.database === 'object') {
                     window.stateData.out.testDatabase = data.database;
+                } else if (typeof data === 'object') {
+                    const testCopy = { ...data };
+                    delete testCopy.entities;
+                    window.stateData.out.testDatabase = testCopy;
                 } else {
                     window.stateData.out.testDatabase = {};
                 }
@@ -92,7 +98,8 @@
             if (window.activeTab === 'out' && typeof window.initSystem === 'function') {
                 window.initSystem();
             }
-            window.logMessage("Referral Out synchronized successfully.", "success");
+            const count = Object.keys(window.stateData.out.testDatabase).length;
+            window.logMessage(`Referral Out synchronized. ${count} test(s) loaded.`, "success");
         }, (error) => {
             window.logMessage("Referral Out Read Error: " + error.message, "error");
         });
@@ -104,8 +111,14 @@
                 if (data.entities && Array.isArray(data.entities) && data.entities.length > 0) {
                     window.stateData.in.entities = data.entities;
                 }
+
+                // Adaptive data extraction (supports nested database property or flat structure)
                 if (data.database && typeof data.database === 'object') {
                     window.stateData.in.testDatabase = data.database;
+                } else if (typeof data === 'object') {
+                    const testCopy = { ...data };
+                    delete testCopy.entities;
+                    window.stateData.in.testDatabase = testCopy;
                 } else {
                     window.stateData.in.testDatabase = {};
                 }
@@ -116,7 +129,8 @@
             if (window.activeTab === 'in' && typeof window.initSystem === 'function') {
                 window.initSystem();
             }
-            window.logMessage("Referral In synchronized successfully.", "success");
+            const count = Object.keys(window.stateData.in.testDatabase).length;
+            window.logMessage(`Referral In synchronized. ${count} test(s) loaded.`, "success");
         }, (error) => {
             window.logMessage("Referral In Read Error: " + error.message, "error");
         });
