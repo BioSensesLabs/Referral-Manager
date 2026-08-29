@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Referral Manager</title>
-  <link rel="icon" href="./favicon.ico" type="image/x-icon" />
+  
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>">
   
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -13,12 +14,12 @@
   <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
     <div class="flex items-center space-x-3">
       <img 
-        src="./logo-04.jpg" 
+        src="logo-04.jpg" 
         alt="Logo" 
         class="h-8 w-auto object-contain"
-        onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"
+        onerror="this.style.display='none'; document.getElementById('alt-logo-text').classList.remove('hidden');"
       />
-      <span class="hidden text-xl font-bold text-indigo-600">Biosenses Labs</span>
+      <span id="alt-logo-text" class="hidden text-xl font-bold text-indigo-600">Biosenses Labs</span>
       <h1 class="text-lg font-semibold text-slate-700 border-l pl-3 border-slate-300">Referral Manager</h1>
     </div>
     <div class="flex items-center space-x-2">
@@ -83,7 +84,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, onValue, push, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // Standardized logMessage implementation to eliminate ReferenceError
+    // Global logger definition
     window.logMessage = function(msg, level = 'info') {
       const output = document.getElementById('console-output');
       if (!output) return;
@@ -102,24 +103,23 @@
       console.log(`[${level.toUpperCase()}] ${msg}`);
     };
 
-    // Firebase Configuration Placeholder
+    // Database Credentials
     const firebaseConfig = {
-            apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
-            authDomain: "lab-referral-pricing.firebaseapp.com",
-            databaseURL: "https://lab-referral-pricing-default-rtdb.firebaseio.com",
-            projectId: "lab-referral-pricing",
-            storageBucket: "lab-referral-pricing.firebasestorage.app",
-            messagingSenderId: "230114183546",
-            appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
-        };
+      apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
+      authDomain: "lab-referral-pricing.firebaseapp.com",
+      databaseURL: "https://lab-referral-pricing-default-rtdb.firebaseio.com",
+      projectId: "lab-referral-pricing",
+      storageBucket: "lab-referral-pricing.firebasestorage.app",
+      messagingSenderId: "230114183546",
+      appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
+    };
 
-    // Initialize Database Connection
+    // Initialize Connection
     let app, db;
     try {
       app = initializeApp(firebaseConfig);
       db = getDatabase(app);
       
-      // Update status badge
       const statusBadge = document.getElementById('connection-status');
       statusBadge.textContent = 'Connected';
       statusBadge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800';
@@ -129,12 +129,11 @@
       logMessage(`Initialization failed: ${err.message}`, 'error');
     }
 
-    // Attach Real-time Database Listener
+    // Attach Listener
     const referralsRef = ref(db, 'referrals');
     
-    // Line 85 Listener with Fixed Logger Binding
     onValue(referralsRef, (snapshot) => {
-      logMessage("Database update detected."); // Safe call to defined logMessage
+      logMessage("Database update detected.");
       
       const tableBody = document.getElementById('referral-table-body');
       tableBody.innerHTML = '';
@@ -159,7 +158,7 @@
       logMessage(`Database error: ${error.message}`, 'error');
     });
 
-    // Form Submission Handling
+    // Form Listener
     document.getElementById('referral-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const nameInput = document.getElementById('ref-name');
@@ -179,7 +178,7 @@
       });
     });
 
-    // Clear Logs UI
+    // Clear Logs
     document.getElementById('clear-log').addEventListener('click', () => {
       document.getElementById('console-output').innerHTML = '';
     });
