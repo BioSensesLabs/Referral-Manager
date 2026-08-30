@@ -1,761 +1,178 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BioSenses Cloud Price Management System</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
-
-        // BioSenses Live Production Cloud Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
-            authDomain: "lab-referral-pricing.firebaseapp.com",
-            databaseURL: "https://lab-referral-pricing-default-rtdb.firebaseio.com",
-            projectId: "lab-referral-pricing",
-            storageBucket: "lab-referral-pricing.firebasestorage.app",
-            messagingSenderId: "230114183546",
-            appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
-        };
-
-        // Initialize Firebase Connection Nodes
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        
-        // Referral Out Database Node
-        const dbRefOut = ref(db, 'lab_data');
-        // Referral In Database Node
-        const dbRefIn = ref(db, 'lab_data_referral_in');
-
-        // Target Test Preset List for Referral In
-        window.referralInPresetTests = [
-            "A1C", "Alkaline Phosphatase", "Albumin", "Amylase", "Bilirubin, total", "Bilirubin, Direct", 
-            "Calcium", "Creatinine", "Cholesterol, Total", "Cholesterol - HDL, Serum", "Cholesterol - LDL, Serum", 
-            "Chloride", "GPT (ALT)", "GOT (AST)", "GGT", "Glucose", "Iron", "Ionized CA", "lipase", "Mg", 
-            "Protein Total", "Potassium", "Sodium", "Triglyceride", "ZINC", "Urea", "Uric acid", "AMH", 
-            "BHCG", "DHEA-S", "Estradiol - E2", "Ferritin", "FSH", "Free T3", "Free T4", "LH", "Prolactin", 
-            "Progesterone", "Testosterone - Free", "Testosterone - Total", "TSH", "Thyroid Peroxidase Abs (ATPO)", 
-            "INSULIN", "Vitamin B12", "Vitamin D", "ASOt", "Anti CCP", "ANCA C", "ANCA P", "Anti DNA ds Abs, Double Stranded, Serum", 
-            "Anti Gliadin ( Deamidated DP ) IgA Abs", "Anti Gliadin ( Deamidated DP ) IgG Abs", "Anti Phospholipid – IgG", 
-            "Anti Phospholipid – IgM", "Anti cardiolipid - IgG", "Anti cardiolipid - IgM", "Anti Mitochondrial Abs (AMA)", 
-            "Anti Nuclear Abs (ANA)", "Anti Smooth Muscle Antibodies (ASMA)", "Anti Liver-Kidney Microsomal-1 (LKM-1 Abs)", 
-            "Brucella - Titer", "B2-glycoprotien Ab - IgG", "B2-glycoprotien Ab - IgM", "C3", "C4", "C-Reactive Protein , Titter", 
-            "ENA (Extractable Nuclear Antigens Abs)", "Food Allergy Panel", "Inhalation panel", "Immunoglobulin A (Total)(IgA)", 
-            "Immunoglobulin E (IgE)", "Immunoglobulin G (IgG)", "Immunoglobulin M (IgM)", "Lupus", "Rheumatoid Factor Titter", 
-            "Tissue Transglutaminase Ab, IgA", "Tissue Transglutaminase Ab, IgG", "Treponema pallidum Haemagglutination (TPHA)", 
-            "VDRL (Syphilis)", "Widal Test", "CEA", "CA 125", "CA 19.9", "CA 15-3", "AFP", "PSA total", "PSA Free", 
-            "PSA ratio", "BRCA1 & BRCA2 Breast Cancer Genes", "Culture and sensitivity", "Complete Blood Count (CBC)", 
-            "Calprotectin Quantitative, Stool", "Fecal immunochemical test", "Helicobacter pylori Antigen in Stool"
-        ];
-
-        // Active Tab System State ('out' | 'in')
-        window.activeTab = 'out';
-
-        // Global State System Variables (Referral Out)
-        window.entities = ['Medlab', 'MedScale', 'GLab', 'Alpha', 'Sultan', 'Smart'];
-        window.testDatabase = {}; 
-        window.currentEditingRow = null; 
-        window.currentInputMode = 'select';
-
-        // Global State System Variables (Referral In)
-        window.inEntities = [];
-        window.inTestDatabase = {};
-        window.inCurrentEditingRow = null;
-        window.inCurrentInputMode = 'select';
-
-        // Populate baseline data for Referral In database from pre-loaded list
-        function initializeReferralInDefaults() {
-            window.referralInPresetTests.forEach(testName => {
-                let key = sanitizeCloudKey(testName);
-                if (!window.inTestDatabase[key]) {
-                    window.inTestDatabase[key] = {};
-                }
-            });
-        }
-
-        // Real-Time Sync: Referral Out
-        onValue(dbRefOut, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                if (data.entities) window.entities = data.entities;
-                window.testDatabase = data.database || {};
-            } else {
-                window.testDatabase = {};
-            }
-            if (window.activeTab === 'out') {
-                logMessage("Cloud synced (Referral Out). Database loaded successfully.", "success");
-                initSystem();
-            }
-        }, (error) => {
-            if (window.activeTab === 'out') logMessage("Cloud Read Failure (Out): " + error.message, "error");
-        });
-
-        // Real-Time Sync: Referral In
-        onValue(dbRefIn, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                window.inEntities = data.entities || [];
-                window.inTestDatabase = data.database || {};
-            } else {
-                window.inEntities = [];
-                window.inTestDatabase = {};
-            }
-            initializeReferralInDefaults();
-            if (window.activeTab === 'in') {
-                logMessage("Cloud synced (Referral In). Database loaded successfully.", "success");
-                initSystem();
-            }
-        }, (error) => {
-            if (window.activeTab === 'in') logMessage("Cloud Read Failure (In): " + error.message, "error");
-        });
-
-        // Push updates to Firebase Cloud Node based on Active Tab
-        window.syncCloudStorage = function() {
-            if (window.activeTab === 'out') {
-                set(dbRefOut, {
-                    entities: window.entities,
-                    database: window.testDatabase
-                }).then(() => {
-                    logMessage("Cloud broadcast complete (Referral Out). Synchronization applied.", "success");
-                }).catch((err) => {
-                    logMessage("Cloud Write Drop Failure: " + err.message, "error");
-                });
-            } else {
-                set(dbRefIn, {
-                    entities: window.inEntities,
-                    database: window.inTestDatabase
-                }).then(() => {
-                    logMessage("Cloud broadcast complete (Referral In). Synchronization applied.", "success");
-                }).catch((err) => {
-                    logMessage("Cloud Write Drop Failure: " + err.message, "error");
-                });
-            }
-        };
-
-        window.clearSystemDatabase = function() {
-            const tabName = window.activeTab === 'out' ? "Referral Out" : "Referral In";
-            if (confirm(`🚨 WARNING: Are you sure you want to reset the ${tabName} cloud database?`)) {
-                if (window.activeTab === 'out') {
-                    window.testDatabase = {};
-                } else {
-                    window.inTestDatabase = {};
-                    initializeReferralInDefaults();
-                }
-                window.syncCloudStorage();
-            }
-        };
-    </script>
-    <style>
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f5f9;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Referral In - Lab Pricing Matrix</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans pb-16 antialiased">
+<body class="bg-gray-50 text-gray-800 p-6">
 
-    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-20 items-center">
-                <div class="flex items-center gap-4">
-                    <img src="logo-04.jpg" alt="BioSenses Logo" class="h-14 w-auto object-contain">
-                    <div class="border-l border-slate-200 pl-4">
-                        <h1 class="text-xl font-bold text-slate-900 tracking-tight">BioSenses Portal</h1>
-                        <p class="text-xs text-indigo-600 font-semibold tracking-wide uppercase">Real-Time Sync Infrastructure</p>
-                    </div>
-                </div>
-                <button onclick="clearSystemDatabase()" class="bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold px-4 py-2 rounded-lg border border-rose-200 transition-colors shadow-sm">
-                    ⚠ Reset Cloud Database
-                </button>
-            </div>
-        </div>
-    </nav>
-
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
-        
-        <div class="flex border-b border-slate-200 bg-white rounded-t-xl px-4 pt-2 gap-2 shadow-xs">
-            <button id="tabOutBtn" onclick="switchTab('out')" class="px-5 py-3 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center gap-2">
-                <span>📤</span> Referral Out
-            </button>
-            <button id="tabInBtn" onclick="switchTab('in')" class="px-5 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all flex items-center gap-2">
-                <span>📥</span> Referral In
-            </button>
-        </div>
-
-        <div id="systemLog" class="p-4 rounded-xl text-xs font-mono shadow-sm border border-slate-200 transition-all duration-300 bg-amber-50 text-amber-800 border-amber-200">Connecting to cloud synchronization engine...</div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Active Tests</p>
-                    <h3 id="statTests" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
-                </div>
-                <div class="bg-indigo-50 text-indigo-600 p-3 rounded-lg font-bold text-lg">🧪</div>
-            </div>
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Managed Labs</p>
-                    <h3 id="statEntities" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
-                </div>
-                <div class="bg-emerald-50 text-emerald-600 p-3 rounded-lg font-bold text-lg">🏢</div>
-            </div>
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Network Cluster Status</p>
-                    <h3 class="text-lg font-bold text-emerald-600 mt-1 flex items-center gap-1">🟢 Connected</h3>
-                </div>
-                <div class="bg-amber-50 text-amber-600 p-3 rounded-lg font-bold text-lg">☁</div>
-            </div>
-        </div>
-
-        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
-            <div class="flex flex-col md:flex-row gap-6 divide-y md:divide-y-0 md:divide-x divide-slate-100">
-                
-                <div class="flex-1 space-y-4">
-                    <div>
-                        <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">System Provisioning</h2>
-                        <p class="text-xs text-slate-400">Initialize baseline matrix spreadsheets or add operational lab entities.</p>
-                    </div>
-                    <div id="uploadSection" class="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5"></div>
-                    <div class="flex gap-2">
-                        <input id="newEntityInput" type="text" placeholder="Add a new lab..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
-                        <button onclick="addNewEntity()" class="bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shrink-0 shadow-sm">
-                            + Add New Lab
-                        </button>
-                    </div>
-                </div>
-
-                <div class="flex-[2] md:pl-6 space-y-4">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div>
-                            <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Test Pricing Manager Matrix</h2>
-                            <p class="text-xs text-slate-400">Select an existing element or spawn custom text entries.</p>
-                        </div>
-                        <div class="inline-flex rounded-md shadow-sm bg-slate-100 p-0.5 border text-xs font-semibold">
-                            <button type="button" id="modeSelectBtn" onclick="toggleTestInputMode('select')" class="bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all">Select Existing Test</button>
-                            <button type="button" id="modeCreateBtn" onclick="toggleTestInputMode('create')" class="text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all">+ Create New Test</button>
-                        </div>
-                    </div>
-
-                    <form id="priceForm" onsubmit="saveFormPrice(event)" class="space-y-4">
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                            <div class="sm:col-span-1" id="testSelectionWrapper">
-                                <label id="testInputLabel" class="block text-xs font-semibold text-slate-500 mb-1">Target Test</label>
-                                <select id="testDropdown" class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-slate-50/50 outline-none focus:ring-2 focus:ring-indigo-500" required>
-                                    <option value="">-- Choose a test --</option>
-                                </select>
-                                <input id="testTextInput" type="text" placeholder="Enter new test name..." class="hidden w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
-                            </div>
-                            <div id="dynamicFormPrices" class="sm:col-span-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-24 overflow-y-auto pr-1"></div>
-                        </div>
-                        <div class="flex justify-end">
-                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm px-6 py-2 rounded-lg transition shadow-md shadow-indigo-100">
-                                Apply Referral Prices
-                            </button>
-                        </div>
-                    </form>
-                </div>
-
-            </div>
-        </div>
-
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
-            <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
-                <div>
-                    <h2 class="text-lg font-bold text-slate-900" id="tableHeadingTitle">Master Referral and Pricing View</h2>
-                    <p class="text-xs text-slate-400">Review structural rates matrices. Real-time updates active.</p>
-                </div>
-                <div class="flex gap-2 w-full sm:w-auto items-center justify-end">
-                    <div class="relative w-full sm:w-72">
-                        <input id="searchInput" type="text" oninput="renderTable()" placeholder="🔍 search test..." class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                    </div>
-                    <button onclick="downloadExcelTable()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
-                        📥 Download Excel
-                    </button>
-                </div>
-            </div>
-
-            <div class="overflow-x-auto max-h-[550px] overflow-y-auto custom-scrollbar relative">
-                <table class="min-w-full divide-y divide-slate-200 text-xs text-left table-fixed border-collapse">
-                    <thead id="tableHeader" class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wider sticky top-0 bg-white z-30 border-b border-slate-200 shadow-sm"></thead>
-                    <tbody id="tableBody" class="divide-y divide-slate-100 text-slate-600"></tbody>
-                </table>
-            </div>
-        </div>
-
+  <div class="max-w-7xl mx-auto space-y-6">
+    <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Referral In - Price Management</h1>
+        <p class="text-sm text-gray-500">Upload pricing matrix sheets and update lab prices in real-time.</p>
+      </div>
+      
+      <div class="flex items-center gap-3">
+        <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md shadow-sm transition-colors text-sm flex items-center gap-2">
+          <span>Upload Pricing Sheet</span>
+          <input type="file" id="fileUpload" accept=".csv, .xlsx, .xls" class="hidden">
+        </label>
+      </div>
     </div>
 
-    <script>
-        function switchTab(tab) {
-            window.activeTab = tab;
-            const tabOutBtn = document.getElementById('tabOutBtn');
-            const tabInBtn = document.getElementById('tabInBtn');
-            const headingTitle = document.getElementById('tableHeadingTitle');
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div class="overflow-x-auto max-h-[70vh]">
+        <table class="w-full text-left border-collapse text-sm" id="matrixTable">
+          <thead class="bg-gray-100 sticky top-0 border-b border-gray-200" id="tableHeader">
+            <tr>
+              <th class="p-3 font-semibold text-gray-700">Test Name</th>
+              </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200" id="tableBody">
+            <tr>
+              <td colspan="10" class="p-4 text-center text-gray-500">Loading pricing matrix...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-            if (tab === 'out') {
-                tabOutBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center gap-2";
-                tabInBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all flex items-center gap-2";
-                headingTitle.innerText = "Master Referral Out Pricing View";
-            } else {
-                tabInBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center gap-2";
-                tabOutBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all flex items-center gap-2";
-                headingTitle.innerText = "Master Referral In Pricing View";
-            }
-            initSystem();
+  <script>
+    // -------------------------------------------------------------
+    // 1. FIREBASE CONFIGURATION
+    // -------------------------------------------------------------
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const pricesRef = db.ref("referralIn/prices");
+
+    // -------------------------------------------------------------
+    // 2. EXCEL / CSV UPLOAD PROCESSING
+    // -------------------------------------------------------------
+    document.getElementById('fileUpload').addEventListener('change', handleFileUpload);
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Read first sheet
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+        if (jsonRows.length === 0) {
+          alert("The uploaded file contains no data.");
+          return;
         }
 
-        function getCurrentEntities() {
-            return window.activeTab === 'out' ? window.entities : window.inEntities;
-        }
+        uploadToFirebase(jsonRows);
+      };
+      reader.readAsArrayBuffer(file);
+    }
 
-        function getCurrentDatabase() {
-            return window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-        }
+    function uploadToFirebase(rows) {
+      const updates = {};
 
-        function getCurrentInputMode() {
-            return window.activeTab === 'out' ? window.currentInputMode : window.inCurrentInputMode;
-        }
+      rows.forEach((row) => {
+        // Grab 'Test name' or fallback to the first key in the row
+        const testNameKey = Object.keys(row).find(k => k.trim().toLowerCase() === "test name") || Object.keys(row)[0];
+        const originalTestName = row[testNameKey];
 
-        function setCurrentInputMode(mode) {
-            if (window.activeTab === 'out') window.currentInputMode = mode;
-            else window.inCurrentInputMode = mode;
-        }
+        if (!originalTestName) return;
 
-        function logMessage(msg, type) {
-            const box = document.getElementById('systemLog');
-            if(!box) return;
-            box.className = "p-4 rounded-xl text-xs font-mono shadow-sm border transition-all duration-300";
-            if (type === "error") {
-                box.classList.add('bg-rose-50', 'text-rose-700', 'border-rose-200');
-            } else {
-                box.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
-            }
-            box.innerText = "[" + new Date().toLocaleTimeString() + "] " + msg;
-        }
+        // Firebase keys cannot contain '.', '#', '$', '[', or ']'
+        const safeTestKey = String(originalTestName).replace(/[.#$\[\]]/g, "_");
 
-        function sanitizeCloudKey(keyStr) {
-            return keyStr.replace(/[\.\#\$\/\[\]]/g, "-");
-        }
-
-        function validateNameChange(oldName, newName) {
-            if (!newName || newName.trim() === "") return { valid: false, msg: "Test name cannot be empty." };
-            let sanitized = sanitizeCloudKey(newName.trim());
-            let db = getCurrentDatabase();
-            if (sanitized !== oldName && db[sanitized]) {
-                return { valid: false, msg: "A test with this name already exists." };
-            }
-            return { valid: true, sanitized: sanitized };
-        }
-
-        function initSystem() {
-            const currentDb = getCurrentDatabase();
-            const currentEnts = getCurrentEntities();
-
-            const uploadSection = document.getElementById('uploadSection');
-            if(uploadSection) {
-                let statusInfo = Object.keys(currentDb).length > 0 
-                    ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${Object.keys(currentDb).length} tests initialized)</span>`
-                    : '';
-                
-                uploadSection.className = "bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5";
-                uploadSection.innerHTML = `
-                    <label class="block flex flex-col cursor-pointer gap-1.5">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs text-slate-500 font-medium">Upload Master Sheet (.xlsx):</span>
-                            <input type="file" id="excelFile" accept=".xlsx, .xls" class="text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"/>
-                        </div>
-                        ${statusInfo}
-                    </label>
-                `;
-                bindExcelUploadListener();
-            }
-
-            document.getElementById('statTests').innerText = Object.keys(currentDb).length.toLocaleString();
-            document.getElementById('statEntities').innerText = currentEnts.length.toLocaleString();
-
-            renderDropdown();
-            renderFormFields();
-            renderTable();
-        }
-
-        function toggleTestInputMode(mode) {
-            setCurrentInputMode(mode);
-            const dropEl = document.getElementById('testDropdown');
-            const textEl = document.getElementById('testTextInput');
-            const lblEl = document.getElementById('testInputLabel');
-            const btnSelect = document.getElementById('modeSelectBtn');
-            const btnCreate = document.getElementById('modeCreateBtn');
-
-            if (mode === 'create') {
-                dropEl.classList.add('hidden'); dropEl.removeAttribute('required');
-                textEl.classList.remove('hidden'); textEl.setAttribute('required', 'true');
-                lblEl.innerText = "New Test Name";
-                btnCreate.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
-                btnSelect.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
-            } else {
-                textEl.classList.add('hidden'); textEl.removeAttribute('required');
-                dropEl.classList.remove('hidden'); dropEl.setAttribute('required', 'true');
-                lblEl.innerText = "Target Test";
-                btnSelect.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
-                btnCreate.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
-            }
-            document.getElementById('priceForm').reset();
-            getCurrentEntities().forEach(ent => document.getElementById(`form-price-${ent}`).value = 0);
-        }
-
-        function bindExcelUploadListener() {
-            const fileInput = document.getElementById('excelFile');
-            if(!fileInput) return;
-            
-            fileInput.addEventListener('change', function(e) {
-                const file = e.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-                reader.onload = function(evt) {
-                    try {
-                        const data = evt.target.result;
-                        const workbook = XLSX.read(data, { type: 'binary' });
-                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                        
-                        if (rawRows.length <= 1) return;
-                        const currentDb = getCurrentDatabase();
-                        const currentEnts = getCurrentEntities();
-
-                        for (let i = 1; i < rawRows.length; i++) {
-                            const row = rawRows[i];
-                            if (!row || row.length === 0) continue;
-                            let rawTestName = row[0] ? String(row[0]).trim() : "";
-                            let basePrice = row[1] ? parseFloat(row[1]) : 0;
-
-                            if (rawTestName && rawTestName !== "undefined" && rawTestName !== "") {
-                                let testName = sanitizeCloudKey(rawTestName);
-
-                                if (!currentDb[testName]) {
-                                    currentDb[testName] = {};
-                                    currentEnts.forEach(ent => currentDb[testName][ent] = 0);
-                                }
-                                if (currentEnts.length > 0) {
-                                    currentDb[testName][currentEnts[0]] = isNaN(basePrice) ? 0 : basePrice;
-                                }
-                            }
-                        }
-                        window.syncCloudStorage();
-                    } catch (parseError) {
-                        logMessage("Fail compilation spreadsheet upload parsing: " + parseError.message, "error");
-                    }
-                };
-                reader.readAsBinaryString(file);
-            });
-        }
-
-        function addNewEntity() {
-            const input = document.getElementById('newEntityInput');
-            let rawName = input.value.trim();
-            if(!rawName) return;
-
-            let name = sanitizeCloudKey(rawName);
-            const currentEnts = getCurrentEntities();
-            const currentDb = getCurrentDatabase();
-
-            if(currentEnts.includes(name)) return;
-
-            currentEnts.push(name);
-            Object.keys(currentDb).forEach(test => { currentDb[test][name] = 0; });
-            input.value = '';
-            window.syncCloudStorage();
-        }
-
-        window.deleteOperationalEntity = function(entityName) {
-            if (confirm(`🚨 WARNING: Delete the entity column "${entityName}"? This will drop its stored prices permanently.`)) {
-                let currentEnts = getCurrentEntities();
-                let currentDb = getCurrentDatabase();
-
-                if (window.activeTab === 'out') {
-                    window.entities = currentEnts.filter(ent => ent !== entityName);
-                } else {
-                    window.inEntities = currentEnts.filter(ent => ent !== entityName);
-                }
-
-                Object.keys(currentDb).forEach(testKey => {
-                    if (currentDb[testKey][entityName] !== undefined) {
-                        delete currentDb[testKey][entityName];
-                    }
-                });
-                window.syncCloudStorage();
-            }
-        }
-
-        function renderDropdown() {
-            const dropdown = document.getElementById('testDropdown');
-            if(!dropdown) return;
-            dropdown.innerHTML = '<option value="">-- Choose a test --</option>';
-            const currentDb = getCurrentDatabase();
-
-            Object.keys(currentDb).sort().forEach(test => {
-                const opt = document.createElement('option'); opt.value = test; opt.textContent = test;
-                dropdown.appendChild(opt);
-            });
-        }
-
-        function renderFormFields() {
-            const container = document.getElementById('dynamicFormPrices');
-            if(!container) return;
-            container.innerHTML = '';
-            const currentEnts = getCurrentEntities();
-
-            if (currentEnts.length === 0) {
-                container.innerHTML = `<span class="text-xs text-slate-400 italic col-span-full">No entities created yet. Add a lab entity to manage prices.</span>`;
-                return;
-            }
-
-            currentEnts.forEach(ent => {
-                container.innerHTML += `
-                    <div>
-                        <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-tight mb-0.5">${ent}</label>
-                        <input type="number" step="0.01" id="form-price-${ent}" value="0" class="w-full border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-mono bg-white">
-                    </div>`;
-            });
-        }
-
-        document.body.addEventListener('change', function(e) {
-            if(e.target && e.target.id === 'testDropdown') {
-                const testName = e.target.value;
-                const mode = getCurrentInputMode();
-                const currentDb = getCurrentDatabase();
-                const currentEnts = getCurrentEntities();
-
-                if(!testName || mode !== 'select') return;
-                currentEnts.forEach(ent => {
-                    document.getElementById(`form-price-${ent}`).value = currentDb[testName][ent] || 0;
-                });
-            }
+        const labPrices = {};
+        Object.keys(row).forEach((key) => {
+          if (key !== testNameKey) {
+            const rawVal = row[key];
+            const numVal = parseFloat(rawVal);
+            labPrices[key] = isNaN(numVal) ? rawVal : numVal;
+          }
         });
 
-        function saveFormPrice(e) {
-            e.preventDefault();
-            const mode = getCurrentInputMode();
-            let rawTestName = mode === 'create' 
-                ? document.getElementById('testTextInput').value.trim() 
-                : document.getElementById('testDropdown').value;
+        updates[`/referralIn/prices/${safeTestKey}`] = {
+          displayName: originalTestName,
+          prices: labPrices
+        };
+      });
 
-            if(!rawTestName) return;
-            let testName = sanitizeCloudKey(rawTestName);
-            const currentDb = getCurrentDatabase();
-            const currentEnts = getCurrentEntities();
+      pricesRef.update(updates)
+        .then(() => alert("Pricing sheet uploaded and database updated successfully!"))
+        .catch((error) => console.error("Firebase update error:", error));
+    }
 
-            if (!currentDb[testName]) {
-                currentDb[testName] = {};
-                currentEnts.forEach(ent => currentDb[testName][ent] = 0);
-            }
+    // -------------------------------------------------------------
+    // 3. REALTIME DATA RENDERING
+    // -------------------------------------------------------------
+    pricesRef.on("value", (snapshot) => {
+      const data = snapshot.val();
+      const headerRow = document.getElementById("tableHeader");
+      const bodyContainer = document.getElementById("tableBody");
 
-            currentEnts.forEach(ent => {
-                currentDb[testName][ent] = parseFloat(document.getElementById(`form-price-${ent}`).value) || 0;
-            });
+      if (!data) {
+        bodyContainer.innerHTML = '<tr><td colspan="10" class="p-4 text-center text-gray-500">No pricing data available. Upload a sheet to populate.</td></tr>';
+        return;
+      }
 
-            window.syncCloudStorage();
-            document.getElementById('testTextInput').value = "";
-            document.getElementById('priceForm').reset();
-            currentEnts.forEach(ent => document.getElementById(`form-price-${ent}`).value = 0);
+      // Collect unique lab names across all entries
+      const labsSet = new Set();
+      Object.values(data).forEach(item => {
+        if (item.prices) {
+          Object.keys(item.prices).forEach(lab => labsSet.add(lab));
         }
+      });
+      const labList = Array.from(labsSet);
 
-        function renderTable() {
-            const header = document.getElementById('tableHeader');
-            const body = document.getElementById('tableBody');
-            if(!header || !body) return;
-            
-            const searchStr = document.getElementById('searchInput').value.toLowerCase();
-            const currentDb = getCurrentDatabase();
-            const currentEnts = getCurrentEntities();
-            const activeEditingRow = window.activeTab === 'out' ? window.currentEditingRow : window.inCurrentEditingRow;
+      // Render Table Header
+      let headerHTML = `<tr><th class="p-3 font-semibold text-gray-700 bg-gray-100 border-b border-gray-200 sticky left-0 z-10">Test Name</th>`;
+      labList.forEach(lab => {
+        headerHTML += `<th class="p-3 font-semibold text-gray-700 border-b border-gray-200 text-center">${lab}</th>`;
+      });
+      headerHTML += `</tr>`;
+      headerRow.innerHTML = headerHTML;
 
-            let headerHTML = `<tr><th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Test Name</th>`;
-            currentEnts.forEach(ent => { 
-                headerHTML += `
-                    <th class="px-2 py-3 w-28 text-slate-700 font-bold border-b bg-slate-50">
-                        <div class="flex items-center gap-1 justify-between">
-                            <span class="truncate" title="${ent}">${ent}</span>
-                            <button onclick="window.deleteOperationalEntity('${ent}')" class="text-slate-300 hover:text-rose-600 text-[9px] p-0.5 rounded transition-colors" title="Delete Entity">❌</button>
-                        </div>
-                    </th>`; 
-            });
-            headerHTML += `<th class="px-3 py-3 w-36 text-center text-slate-700 font-bold sticky right-0 bg-slate-50 border-b z-20 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">Actions</th></tr>`;
-            header.innerHTML = headerHTML;
+      // Render Table Rows
+      let bodyHTML = "";
+      Object.entries(data).forEach(([testKey, testData]) => {
+        const displayName = testData.displayName || testKey;
+        const prices = testData.prices || {};
 
-            body.innerHTML = '';
-            const filteredTests = Object.keys(currentDb).filter(test => test.toLowerCase().includes(searchStr)).sort();
+        bodyHTML += `<tr class="hover:bg-gray-50 border-b border-gray-100">`;
+        bodyHTML += `<td class="p-3 font-medium text-gray-900 bg-white sticky left-0 z-10 shadow-sm">${displayName}</td>`;
 
-            if(filteredTests.length === 0) {
-                body.innerHTML = `<tr><td colspan="${currentEnts.length + 2}" class="text-center p-12 text-slate-400 font-medium">No records match current search parameters.</td></tr>`;
-                return;
-            }
+        labList.forEach(lab => {
+          const price = prices[lab] !== undefined ? prices[lab] : "-";
+          bodyHTML += `<td class="p-3 text-center text-gray-600">${price}</td>`;
+        });
 
-            filteredTests.forEach(test => {
-                const tr = document.createElement('tr');
-                const isEditing = (activeEditingRow === test);
-                
-                tr.className = isEditing 
-                    ? "bg-indigo-50/50 border-y-2 border-indigo-400 font-medium transition-colors" 
-                    : "hover:bg-slate-50/80 transition-colors border-b border-slate-100 bg-white";
+        bodyHTML += `</tr>`;
+      });
 
-                let rowHTML = "";
-                if (isEditing) {
-                    rowHTML += `
-                    <td class="px-2 py-1.5 sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">
-                        <input type="text" value="${test}" id="inline-edit-testname" class="w-full border border-indigo-400 rounded px-2 py-1 text-xs font-semibold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500">
-                    </td>`;
-                } else {
-                    rowHTML += `<td class="px-3 py-2 font-semibold text-slate-900 break-words sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">${test}</td>`;
-                }
-                
-                let pricesArr = [];
-                currentEnts.forEach(ent => {
-                    const val = currentDb[test][ent] !== undefined ? parseFloat(currentDb[test][ent]) : 0;
-                    pricesArr.push(val);
-                });
-
-                let minVal = pricesArr.length > 0 ? Math.min(...pricesArr) : 0;
-                let maxVal = pricesArr.length > 0 ? Math.max(...pricesArr) : 0;
-                let allEqual = pricesArr.length === 0 || pricesArr.every(v => v === pricesArr[0]);
-
-                currentEnts.forEach(ent => {
-                    const price = currentDb[test][ent] !== undefined ? parseFloat(currentDb[test][ent]) : 0;
-                    
-                    let cellBgClass = "";
-                    if (!allEqual && !isEditing) {
-                        if (price === minVal) cellBgClass = "bg-emerald-100 text-emerald-900 font-bold rounded-xs shadow-xs";
-                        else if (price === maxVal) cellBgClass = "bg-rose-100 text-rose-900 font-bold rounded-xs shadow-xs";
-                    }
-
-                    rowHTML += isEditing 
-                        ? `<td class="px-1.5 py-1.5"><input type="number" step="0.01" value="${price}" id="inline-edit-${ent}" class="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-xs font-mono font-bold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500"></td>`
-                        : `<td class="px-2 py-2 font-mono text-slate-600 transition-colors ${cellBgClass}">${Number(price).toFixed(2)}</td>`;
-                });
-                
-                tr.innerHTML = rowHTML;
-
-                const tdActions = document.createElement('td');
-                tdActions.className = "px-3 py-2 text-center space-x-1.5 whitespace-nowrap sticky right-0 bg-inherit z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] border-l border-slate-100";
-
-                if (isEditing) {
-                    const saveBtn = document.createElement('button');
-                    saveBtn.className = "bg-indigo-600 text-white hover:bg-indigo-700 px-2 py-1 text-[10px] font-bold rounded shadow-sm transition-colors";
-                    saveBtn.innerText = "Save"; saveBtn.dataset.oldTestName = test;
-                    saveBtn.addEventListener('click', function() { saveInlineRowChanges(this.dataset.oldTestName); });
-
-                    const cancelBtn = document.createElement('button');
-                    cancelBtn.className = "bg-slate-200 text-slate-700 hover:bg-slate-300 px-2 py-1 text-[10px] font-bold rounded transition-colors";
-                    cancelBtn.innerText = "Cancel";
-                    cancelBtn.addEventListener('click', function() { 
-                        if (window.activeTab === 'out') window.currentEditingRow = null; 
-                        else window.inCurrentEditingRow = null;
-                        renderTable(); 
-                    });
-
-                    tdActions.appendChild(saveBtn); tdActions.appendChild(cancelBtn);
-                } else {
-                    const editBtn = document.createElement('button');
-                    editBtn.className = "text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 px-2 py-0.5 rounded text-[11px] font-bold transition-all";
-                    editBtn.innerText = "Edit"; editBtn.dataset.testName = test;
-                    editBtn.addEventListener('click', function() { 
-                        if (window.activeTab === 'out') window.currentEditingRow = this.dataset.testName; 
-                        else window.inCurrentEditingRow = this.dataset.testName;
-                        renderTable(); 
-                    });
-
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.className = "text-rose-600 hover:text-rose-900 hover:bg-rose-50 border border-transparent hover:border-rose-100 px-2 py-0.5 rounded text-[11px] font-bold transition-all";
-                    deleteBtn.innerText = "Delete"; deleteBtn.dataset.testName = test;
-                    deleteBtn.addEventListener('click', function() { handleDeleteClick(this.dataset.testName); });
-
-                    tdActions.appendChild(editBtn); tdActions.appendChild(deleteBtn);
-                }
-                tr.appendChild(tdActions); body.appendChild(tr);
-            });
-        }
-
-        function saveInlineRowChanges(oldTestName) {
-            const nameField = document.getElementById('inline-edit-testname');
-            if(!nameField) return;
-
-            let check = validateNameChange(oldTestName, nameField.value);
-            if(!check.valid) {
-                alert(check.msg);
-                return;
-            }
-
-            let newSanitizedName = check.sanitized;
-            let targetRowData = {};
-            const currentEnts = getCurrentEntities();
-            const currentDb = getCurrentDatabase();
-
-            currentEnts.forEach(ent => {
-                const el = document.getElementById(`inline-edit-${ent}`);
-                targetRowData[ent] = el ? parseFloat(el.value) || 0 : 0;
-            });
-
-            if (oldTestName !== newSanitizedName) {
-                delete currentDb[oldTestName];
-            }
-            currentDb[newSanitizedName] = targetRowData;
-
-            if (window.activeTab === 'out') window.currentEditingRow = null;
-            else window.inCurrentEditingRow = null;
-
-            window.syncCloudStorage();
-        }
-
-        function handleDeleteClick(testName) {
-            if (confirm(`Are you sure you want to delete test "${testName}"?`)) {
-                const currentDb = getCurrentDatabase();
-                delete currentDb[testName];
-                window.syncCloudStorage();
-            }
-        }
-
-        function downloadExcelTable() {
-            const currentDb = getCurrentDatabase();
-            const currentEnts = getCurrentEntities();
-            const sortedTests = Object.keys(currentDb).sort();
-            
-            if (sortedTests.length === 0) {
-                alert("No data available to export.");
-                return;
-            }
-
-            const excelRows = [];
-            const headerRow = ["Test Name", ...currentEnts];
-            excelRows.push(headerRow);
-
-            sortedTests.forEach(test => {
-                const row = [test];
-                currentEnts.forEach(ent => {
-                    row.push(currentDb[test][ent] !== undefined ? currentDb[test][ent] : 0);
-                });
-                excelRows.push(row);
-            });
-
-            const worksheet = XLSX.utils.aoa_to_sheet(excelRows);
-            const workbook = XLSX.utils.book_new();
-            const tabLabel = window.activeTab === 'out' ? "Referral_Out" : "Referral_In";
-            XLSX.utils.book_append_sheet(workbook, worksheet, tabLabel);
-            XLSX.writeFile(workbook, `BioSenses_${tabLabel}_Pricing.xlsx`);
-        }
-    </script>
+      bodyContainer.innerHTML = bodyHTML;
+    });
+  </script>
 </body>
 </html>
