@@ -1,295 +1,451 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Referral Pricing Management System</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab Pricing Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
 </head>
-<body class="bg-gray-50 text-gray-800 p-6">
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
 
-  <div class="max-w-6xl mx-auto space-y-6">
-    <header class="flex justify-between items-center bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">Referral Lab Pricing Matrix</h1>
-        <p class="text-sm text-gray-500">Manage test prices across external referral laboratories</p>
-      </div>
-      <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md shadow-sm text-sm">
-        + Add New Lab / Entity
-      </button>
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 text-white p-2 rounded-lg">
+                    <i class="fa-solid fa-flask-vial text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-slate-900 text-lg leading-tight">Lab Pricing Management</h1>
+                    <p class="text-xs text-slate-500">Configure Referral In/Out Matrix & Entities</p>
+                </div>
+            </div>
+            
+            <button onclick="openAddEntityModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm flex items-center transition">
+                <i class="fa-solid fa-plus mr-2"></i> Add New Entity
+            </button>
+        </div>
     </header>
 
-    <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex items-center justify-between">
-      <div class="w-1/3">
-        <label for="labSelector" class="block text-sm font-medium text-gray-700 mb-1">Select Laboratory / Entity</label>
-        <select id="labSelector" onchange="renderPriceTable()" class="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500">
-          </select>
-      </div>
-      <button onclick="savePricesToFirebase()" class="bg-green-600 hover:bg-green-700 text-white font-medium px-5 py-2 rounded-md shadow-sm text-sm">
-        Save Pricing Changes
-      </button>
+    <div class="bg-white border-b border-slate-200 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav class="flex space-x-8" aria-label="Tabs">
+                <button id="tabReferralIn" onclick="switchTab('referral_in')" class="py-4 px-1 border-b-2 border-indigo-600 font-medium text-sm text-indigo-600 flex items-center space-x-2">
+                    <i class="fa-solid fa-arrow-down-left-and-arrow-up-right-to-center"></i>
+                    <span>Referral In</span>
+                    <span id="badgeReferralIn" class="bg-indigo-100 text-indigo-600 py-0.5 px-2.5 rounded-full text-xs font-semibold">0</span>
+                </button>
+
+                <button id="tabReferralOut" onclick="switchTab('referral_out')" class="py-4 px-1 border-b-2 border-transparent font-medium text-sm text-slate-500 hover:text-slate-700 hover:border-slate-300 flex items-center space-x-2">
+                    <i class="fa-solid fa-share-nodes"></i>
+                    <span>Referral Out</span>
+                    <span id="badgeReferralOut" class="bg-slate-100 text-slate-600 py-0.5 px-2.5 rounded-full text-xs font-semibold">0</span>
+                </button>
+            </nav>
+        </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <table class="w-full text-left border-collapse">
-        <thead class="bg-gray-100 text-gray-700 text-xs uppercase border-b border-gray-200">
-          <tr>
-            <th class="p-4">Test Name</th>
-            <th class="p-4">Standard Price ($)</th>
-            <th class="p-4">Selected Lab Price ($)</th>
-            <th class="p-4">Difference ($)</th>
-          </tr>
-        </thead>
-        <tbody id="pricingTableBody" class="divide-y divide-gray-200 text-sm">
-          </tbody>
-      </table>
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full space-y-6">
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            
+            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full md:w-auto">
+                <div class="w-full sm:w-64">
+                    <label for="entitySelect" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Select Entity / Lab</label>
+                    <div class="relative">
+                        <select id="entitySelect" onchange="handleEntityChange()" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 pr-8 appearance-none font-medium">
+                            </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                            <i class="fa-solid fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-full sm:w-64">
+                    <label for="searchInput" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Search Tests</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-sm"></i>
+                        <input type="text" id="searchInput" oninput="renderTable()" placeholder="Search test name..." class="w-full pl-9 bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 p-2.5">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3 self-end md:self-auto">
+                <button onclick="saveCurrentPrices()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-5 py-2.5 rounded-lg text-sm shadow-sm flex items-center transition">
+                    <i class="fa-solid fa-floppy-disk mr-2"></i> Save Changes
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500 tracking-wider">
+                            <th class="py-3.5 px-4">Test Name</th>
+                            <th class="py-3.5 px-4 text-center">Standard Rate ($)</th>
+                            <th class="py-3.5 px-4 text-center">Configured Price ($)</th>
+                            <th class="py-3.5 px-4 text-center">Variance / Diff ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pricingTableBody" class="divide-y divide-slate-200 text-sm text-slate-700">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="addEntityModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-lg font-bold text-slate-900 flex items-center">
+                    <i class="fa-solid fa-building-circle-plus text-indigo-600 mr-2"></i> Add New Entity
+                </h3>
+                <button onclick="closeAddEntityModal()" class="text-slate-400 hover:text-slate-600 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label for="newEntityName" class="block text-sm font-medium text-slate-700 mb-1">Entity / Lab Name</label>
+                    <input type="text" id="newEntityName" placeholder="e.g., Al-Madina Diagnostic Lab" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                </div>
+
+                <div>
+                    <label for="newEntityCategory" class="block text-sm font-medium text-slate-700 mb-1">Referral Type</label>
+                    <select id="newEntityCategory" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white">
+                        <option value="referral_in">Referral In</option>
+                        <option value="referral_out">Referral Out</option>
+                    </select>
+                </div>
+
+                <div class="p-3 bg-indigo-50 rounded-lg border border-indigo-100 flex items-start space-x-3">
+                    <input type="checkbox" id="defaultToStandardCheckbox" class="mt-0.5 h-4 w-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+                    <label for="defaultToStandardCheckbox" class="text-xs text-indigo-900 leading-relaxed font-medium cursor-pointer">
+                        Default all prices to Standard Pricing rates upon creation.
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button onclick="closeAddEntityModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 font-medium transition">Cancel</button>
+                <button onclick="submitNewEntity()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition">Create Entity</button>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <div id="addLabModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-lg max-w-md w-full p-6 shadow-xl space-y-4">
-      <h3 class="text-lg font-bold text-gray-900">Add New Laboratory / Entity</h3>
-      <div>
-        <label for="newLabName" class="block text-sm font-medium text-gray-700 mb-1">Lab Name</label>
-        <input type="text" id="newLabName" placeholder="e.g. City Diagnostics" class="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500" />
-      </div>
+    <script>
+        // --- 1. FIREBASE CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
+            authDomain: "lab-referral-pricing.firebaseapp.com",
+            databaseURL: "https://lab-referral-pricing-default-rtdb.firebaseio.com",
+            projectId: "lab-referral-pricing",
+            storageBucket: "lab-referral-pricing.firebasestorage.app",
+            messagingSenderId: "230114183546",
+            appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
+        };
 
-      <div class="flex items-center space-x-2 pt-2">
-        <input type="checkbox" id="defaultToStandard" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
-        <label for="defaultToStandard" class="text-sm text-gray-700 font-medium">Default all prices to Standard Pricing</label>
-      </div>
-
-      <div class="flex justify-end space-x-3 pt-4 border-t border-gray-100">
-        <button onclick="closeModal()" class="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-        <button onclick="handleAddLabSubmit()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium">Create Lab</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // --- 1. FIREBASE CONFIGURATION ---
-    const firebaseConfig = {
-      apiKey: "AIzaSyBLGJ4USTKx_TGf1bEx2psqY5Lq1SSoPhU",
-      authDomain: "lab-referral-pricing.firebaseapp.com",
-      databaseURL: "https://lab-referral-pricing-default-rtdb.firebaseio.com",
-      projectId: "lab-referral-pricing",
-      storageBucket: "lab-referral-pricing.firebasestorage.app",
-      messagingSenderId: "230114183546",
-      appId: "1:230114183546:web:5803bbb4eec0d25d042ec3"
-    };
-
-    if (!firebase.apps.length) {
-      firebase.initializeApp(firebaseConfig);
-    }
-    const db = firebase.database();
-
-    // --- 2. INITIAL CSV MATRIX DATA ---
-    const SEED_LAB_PRICING = {
-      "Standard": {
-        "A1C": 3.5, "AFP": 4, "Albumin": 1.5, "Alkaline Phosphatase": 1.5, "AMH": 10,
-        "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
-        "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
-        "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 3, "Food Allergy Panel": 30, "Free T3": 3,
-        "Free T4": 3, "FSH": 3, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1.5, "GPT (ALT)": 1.5,
-        "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
-        "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
-      },
-      "Alpha": {
-        "A1C": 3.5, "AFP": 4, "Albumin": 1.5, "Alkaline Phosphatase": 1.5, "AMH": 10,
-        "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
-        "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
-        "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 3, "Food Allergy Panel": 30, "Free T3": 3,
-        "Free T4": 3, "FSH": 3, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1.5, "GPT (ALT)": 1.5,
-        "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
-        "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
-      },
-      "Alharamain": {
-        "A1C": 3.5, "AFP": 3.9, "Albumin": 1, "Alkaline Phosphatase": 1, "AMH": 9,
-        "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
-        "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
-        "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 2.5, "Food Allergy Panel": 30, "Free T3": 2.5,
-        "Free T4": 2.5, "FSH": 2.5, "GGT": 1, "Glucose": 1, "GOT (AST)": 1, "GPT (ALT)": 1,
-        "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
-        "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
-      },
-      "Naya": {
-        "A1C": 3.5, "AFP": 4, "Albumin": 1.5, "Alkaline Phosphatase": 1.5, "AMH": 10,
-        "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
-        "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
-        "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 3, "Food Allergy Panel": 30, "Free T3": 3,
-        "Free T4": 3, "FSH": 3, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1.5, "GPT (ALT)": 1.5,
-        "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
-        "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
-      },
-      "Darb Alsalama": {
-        "A1C": 3.5, "AFP": 4, "Albumin": 1, "Alkaline Phosphatase": 1.5, "AMH": 10,
-        "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
-        "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
-        "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 2.75, "Food Allergy Panel": 28, "Free T3": 2.75,
-        "Free T4": 2.5, "FSH": 2.5, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1, "GPT (ALT)": 1,
-        "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
-        "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 4.5
-      },
-      "Alerada": {
-        "A1C": 3.5, "AFP": 4, "Albumin": 1.5, "Alkaline Phosphatase": 1.5, "AMH": 10,
-        "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
-        "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
-        "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 3, "Food Allergy Panel": 30, "Free T3": 3,
-        "Free T4": 3, "FSH": 3, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1.5, "GPT (ALT)": 1.5,
-        "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
-        "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
-      },
-      "Sedeer": {
-        "A1C": 3.5, "AFP": 4, "Albumin": 1.5, "Alkaline Phosphatase": 1.5, "AMH": 10,
-        "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
-        "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
-        "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 3, "Food Allergy Panel": 30, "Free T3": 3,
-        "Free T4": 3, "FSH": 3, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1.5, "GPT (ALT)": 1.5,
-        "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
-        "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
-      }
-    };
-
-    let labPricingState = {};
-
-    // --- 3. APPLICATION INITIALIZATION ---
-    window.addEventListener("DOMContentLoaded", () => {
-      fetchDataFromFirebase();
-    });
-
-    function fetchDataFromFirebase() {
-      db.ref("referral_pricing").on("value", (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          labPricingState = data;
-        } else {
-          // Initialize Firebase with dataset if empty
-          labPricingState = SEED_LAB_PRICING;
-          db.ref("referral_pricing").set(SEED_LAB_PRICING);
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
         }
-        populateLabDropdown();
-        renderPriceTable();
-      });
-    }
+        const db = firebase.database();
 
-    function populateLabDropdown() {
-      const selector = document.getElementById("labSelector");
-      const currentSelection = selector.value;
-      selector.innerHTML = "";
+        // --- 2. COMPLETE CSV DATA INITIAL SEED ---
+        const INITIAL_REFERRAL_IN_DATA = {
+            "Standard": {
+                "A1C": 3.5, "AFP": 4, "Albumin": 1.5, "Alkaline Phosphatase": 1.5, "AMH": 10,
+                "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
+                "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
+                "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 3, "Food Allergy Panel": 30, "Free T3": 3,
+                "Free T4": 3, "FSH": 3, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1.5, "GPT (ALT)": 1.5,
+                "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
+                "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
+            },
+            "Alpha": {
+                "A1C": 3.5, "AFP": 4, "Albumin": 1.5, "Alkaline Phosphatase": 1.5, "AMH": 10,
+                "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
+                "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
+                "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 3, "Food Allergy Panel": 30, "Free T3": 3,
+                "Free T4": 3, "FSH": 3, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1.5, "GPT (ALT)": 1.5,
+                "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
+                "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
+            },
+            "Alharamain": {
+                "A1C": 3.5, "AFP": 3.9, "Albumin": 1, "Alkaline Phosphatase": 1, "AMH": 9,
+                "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
+                "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
+                "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 2.5, "Food Allergy Panel": 30, "Free T3": 2.5,
+                "Free T4": 2.5, "FSH": 2.5, "GGT": 1, "Glucose": 1, "GOT (AST)": 1, "GPT (ALT)": 1,
+                "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
+                "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
+            },
+            "Naya": {
+                "A1C": 3.5, "AFP": 4, "Albumin": 1.5, "Alkaline Phosphatase": 1.5, "AMH": 10,
+                "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
+                "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
+                "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 3, "Food Allergy Panel": 30, "Free T3": 3,
+                "Free T4": 3, "FSH": 3, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1.5, "GPT (ALT)": 1.5,
+                "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
+                "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
+            },
+            "Darb Alsalama": {
+                "A1C": 3.5, "AFP": 4, "Albumin": 1, "Alkaline Phosphatase": 1.5, "AMH": 10,
+                "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
+                "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
+                "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 2.75, "Food Allergy Panel": 28, "Free T3": 2.75,
+                "Free T4": 2.5, "FSH": 2.5, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1, "GPT (ALT)": 1,
+                "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
+                "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 4.5
+            },
+            "Alerada": {
+                "A1C": 3.5, "AFP": 4, "Albumin": 1.5, "Alkaline Phosphatase": 1.5, "AMH": 10,
+                "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
+                "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
+                "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 3, "Food Allergy Panel": 30, "Free T3": 3,
+                "Free T4": 3, "FSH": 3, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1.5, "GPT (ALT)": 1.5,
+                "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
+                "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
+            },
+            "Sedeer": {
+                "A1C": 3.5, "AFP": 4, "Albumin": 1.5, "Alkaline Phosphatase": 1.5, "AMH": 10,
+                "Amylase": 2, "ANCA C": 4, "ANCA P": 4, "Anti cardiolipid - IgG": 4.5, "Anti cardiolipid - IgM": 4.5,
+                "Anti CCP": 12, "Anti DNA ds Abs, Double Stranded, Serum": 4, "Anti Gliadin ( Deamidated DP ) IgA Abs": 7,
+                "Anti Gliadin ( Deamidated DP ) IgG Abs": 7, "Ferritin": 3, "Food Allergy Panel": 30, "Free T3": 3,
+                "Free T4": 3, "FSH": 3, "GGT": 1.5, "Glucose": 1, "GOT (AST)": 1.5, "GPT (ALT)": 1.5,
+                "Helicobacter pylori Antigen in Stool": 5, "Immunoglobulin A (Total)(IgA)": 3, "Immunoglobulin E (IgE)": 5,
+                "Immunoglobulin G (IgG)": 3, "Immunoglobulin M (IgM)": 3, "Inhalation panel": 30, "INSULIN": 5
+            }
+        };
 
-      Object.keys(labPricingState).forEach((labName) => {
-        const option = document.createElement("option");
-        option.value = labName;
-        option.textContent = labName;
-        selector.appendChild(option);
-      });
+        // --- 3. STATE MANAGEMENT ---
+        let currentTab = 'referral_in'; // 'referral_in' | 'referral_out'
+        let appData = {
+            referral_in: {},
+            referral_out: {}
+        };
 
-      if (currentSelection && labPricingState[currentSelection]) {
-        selector.value = currentSelection;
-      }
-    }
+        // --- 4. INITIALIZATION ---
+        window.addEventListener('DOMContentLoaded', () => {
+            initFirebaseListeners();
+        });
 
-    function renderPriceTable() {
-      const selectedLab = document.getElementById("labSelector").value;
-      const tbody = document.getElementById("pricingTableBody");
-      tbody.innerHTML = "";
+        function initFirebaseListeners() {
+            db.ref().on('value', (snapshot) => {
+                const val = snapshot.val() || {};
+                
+                // Referral In Setup
+                if (val.referral_in) {
+                    appData.referral_in = val.referral_in;
+                } else {
+                    appData.referral_in = INITIAL_REFERRAL_IN_DATA;
+                    db.ref('referral_in').set(INITIAL_REFERRAL_IN_DATA);
+                }
 
-      if (!selectedLab || !labPricingState[selectedLab]) return;
+                // Referral Out Setup
+                if (val.referral_out) {
+                    appData.referral_out = val.referral_out;
+                } else {
+                    // Seed Referral Out default structure if empty
+                    const defaultRefOut = { "Standard": { ...INITIAL_REFERRAL_IN_DATA["Standard"] } };
+                    appData.referral_out = defaultRefOut;
+                    db.ref('referral_out').set(defaultRefOut);
+                }
 
-      const standardPrices = labPricingState["Standard"] || {};
-      const currentLabPrices = labPricingState[selectedLab];
-
-      Object.keys(standardPrices).forEach((testName) => {
-        const standardVal = Number(standardPrices[testName]) || 0;
-        const labVal = Number(currentLabPrices[testName]) ?? standardVal;
-        const diff = (labVal - standardVal).toFixed(2);
-
-        let diffClass = "text-gray-500";
-        if (diff > 0) diffClass = "text-red-600 font-semibold";
-        if (diff < 0) diffClass = "text-green-600 font-semibold";
-
-        const tr = document.createElement("tr");
-        tr.className = "hover:bg-gray-50";
-        tr.innerHTML = `
-          <td class="p-4 font-medium text-gray-900">${testName}</td>
-          <td class="p-4 text-gray-600">$${standardVal.toFixed(2)}</td>
-          <td class="p-4">
-            <input 
-              type="number" 
-              step="0.01" 
-              value="${labVal}" 
-              onchange="updatePriceInMemory('${selectedLab}', '${testName}', this.value)"
-              class="w-28 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-blue-500 focus:border-blue-500" 
-            />
-          </td>
-          <td class="p-4 ${diffClass}">${diff == 0 ? "0.00" : (diff > 0 ? `+${diff}` : diff)}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    function updatePriceInMemory(labName, testName, value) {
-      if (!labPricingState[labName]) labPricingState[labName] = {};
-      labPricingState[labName][testName] = parseFloat(value) || 0;
-      renderPriceTable();
-    }
-
-    function savePricesToFirebase() {
-      db.ref("referral_pricing").set(labPricingState)
-        .then(() => alert("Pricing matrix successfully saved to Firebase."))
-        .catch((err) => alert("Error saving data: " + err.message));
-    }
-
-    // --- 4. ENTITY CREATION LOGIC ---
-    function handleAddLabSubmit() {
-      const labNameInput = document.getElementById("newLabName").value.trim();
-      const defaultToStandard = document.getElementById("defaultToStandard").checked;
-
-      if (!labNameInput) {
-        alert("Please enter a valid laboratory name.");
-        return;
-      }
-
-      if (labPricingState[labNameInput]) {
-        alert("A laboratory with this name already exists.");
-        return;
-      }
-
-      const standardPrices = labPricingState["Standard"] || {};
-      const newLabPrices = {};
-
-      Object.keys(standardPrices).forEach((testName) => {
-        if (defaultToStandard) {
-          newLabPrices[testName] = standardPrices[testName];
-        } else {
-          newLabPrices[testName] = 0;
+                updateTabBadges();
+                populateEntityDropdown();
+                renderTable();
+            });
         }
-      });
 
-      // Update Local State & Persist to Firebase
-      labPricingState[labNameInput] = newLabPrices;
-      db.ref(`referral_pricing/${labNameInput}`).set(newLabPrices)
-        .then(() => {
-          populateLabDropdown();
-          document.getElementById("labSelector").value = labNameInput;
-          renderPriceTable();
-          closeModal();
-        })
-        .catch((err) => alert("Failed to create lab: " + err.message));
-    }
+        // --- 5. UI CONTROLS & TAB SWITCHING ---
+        function switchTab(tabName) {
+            currentTab = tabName;
 
-    // --- Modal Controls ---
-    function openModal() {
-      document.getElementById("newLabName").value = "";
-      document.getElementById("defaultToStandard").checked = false;
-      document.getElementById("addLabModal").classList.remove("hidden");
-    }
+            const tabIn = document.getElementById('tabReferralIn');
+            const tabOut = document.getElementById('tabReferralOut');
 
-    function closeModal() {
-      document.getElementById("addLabModal").classList.add("hidden");
-    }
-  </script>
+            if (tabName === 'referral_in') {
+                tabIn.className = "py-4 px-1 border-b-2 border-indigo-600 font-medium text-sm text-indigo-600 flex items-center space-x-2";
+                tabOut.className = "py-4 px-1 border-b-2 border-transparent font-medium text-sm text-slate-500 hover:text-slate-700 hover:border-slate-300 flex items-center space-x-2";
+            } else {
+                tabOut.className = "py-4 px-1 border-b-2 border-indigo-600 font-medium text-sm text-indigo-600 flex items-center space-x-2";
+                tabIn.className = "py-4 px-1 border-b-2 border-transparent font-medium text-sm text-slate-500 hover:text-slate-700 hover:border-slate-300 flex items-center space-x-2";
+            }
+
+            populateEntityDropdown();
+            renderTable();
+        }
+
+        function updateTabBadges() {
+            const countIn = Object.keys(appData.referral_in || {}).length;
+            const countOut = Object.keys(appData.referral_out || {}).length;
+
+            document.getElementById('badgeReferralIn').textContent = countIn;
+            document.getElementById('badgeReferralOut').textContent = countOut;
+        }
+
+        function populateEntityDropdown() {
+            const selector = document.getElementById('entitySelect');
+            const previousSelection = selector.value;
+            selector.innerHTML = '';
+
+            const currentDataSet = appData[currentTab] || {};
+            const entities = Object.keys(currentDataSet);
+
+            entities.forEach((entity) => {
+                const opt = document.createElement('option');
+                opt.value = entity;
+                opt.textContent = entity;
+                selector.appendChild(opt);
+            });
+
+            if (previousSelection && currentDataSet[previousSelection]) {
+                selector.value = previousSelection;
+            } else if (entities.length > 0) {
+                selector.value = entities[0];
+            }
+        }
+
+        function handleEntityChange() {
+            renderTable();
+        }
+
+        // --- 6. TABLE RENDERING ---
+        function renderTable() {
+            const tbody = document.getElementById('pricingTableBody');
+            tbody.innerHTML = '';
+
+            const selectedEntity = document.getElementById('entitySelect').value;
+            const searchQuery = document.getElementById('searchInput').value.toLowerCase().trim();
+            const currentMatrix = appData[currentTab] || {};
+
+            if (!selectedEntity || !currentMatrix[selectedEntity]) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-slate-400">No lab/entity data available.</td></tr>`;
+                return;
+            }
+
+            const standardPrices = currentMatrix['Standard'] || currentMatrix[selectedEntity] || {};
+            const entityPrices = currentMatrix[selectedEntity];
+
+            let rowCount = 0;
+
+            Object.keys(standardPrices).forEach((testName) => {
+                if (searchQuery && !testName.toLowerCase().includes(searchQuery)) return;
+
+                rowCount++;
+                const stdVal = parseFloat(standardPrices[testName]) || 0;
+                const labVal = entityPrices[testName] !== undefined ? parseFloat(entityPrices[testName]) : stdVal;
+                const diff = (labVal - stdVal).toFixed(2);
+
+                let diffBadge = `<span class="text-slate-400 font-mono">0.00</span>`;
+                if (diff > 0) {
+                    diffBadge = `<span class="bg-red-50 text-red-600 px-2.5 py-1 rounded-md text-xs font-semibold font-mono">+${diff}</span>`;
+                } else if (diff < 0) {
+                    diffBadge = `<span class="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-md text-xs font-semibold font-mono">${diff}</span>`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-medium text-slate-900">${testName}</td>
+                    <td class="py-3 px-4 text-center font-mono text-slate-500">$${stdVal.toFixed(2)}</td>
+                    <td class="py-3 px-4 text-center">
+                        <div class="relative inline-block">
+                            <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 text-xs">$</span>
+                            <input 
+                                type="number" 
+                                step="0.01" 
+                                value="${labVal}" 
+                                onchange="updateInMemoryPrice('${selectedEntity}', '${testName}', this.value)"
+                                class="w-28 pl-6 pr-2 py-1.5 border border-slate-300 rounded-lg text-sm text-center font-mono font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                            >
+                        </div>
+                    </td>
+                    <td class="py-3 px-4 text-center">${diffBadge}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            if (rowCount === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-slate-400">No matching tests found.</td></tr>`;
+            }
+        }
+
+        function updateInMemoryPrice(entity, testName, value) {
+            const val = parseFloat(value) || 0;
+            if (!appData[currentTab][entity]) {
+                appData[currentTab][entity] = {};
+            }
+            appData[currentTab][entity][testName] = val;
+            renderTable();
+        }
+
+        // --- 7. PERSISTENCE & MODAL ACTIONS ---
+        function saveCurrentPrices() {
+            db.ref(currentTab).set(appData[currentTab])
+                .then(() => alert("Prices saved successfully to Firebase!"))
+                .catch((err) => alert("Failed to save: " + err.message));
+        }
+
+        function openAddEntityModal() {
+            document.getElementById('newEntityName').value = '';
+            document.getElementById('newEntityCategory').value = currentTab;
+            document.getElementById('defaultToStandardCheckbox').checked = false;
+            document.getElementById('addEntityModal').classList.remove('hidden');
+        }
+
+        function closeAddEntityModal() {
+            document.getElementById('addEntityModal').classList.add('hidden');
+        }
+
+        function submitNewEntity() {
+            const nameInput = document.getElementById('newEntityName').value.trim();
+            const targetCategory = document.getElementById('newEntityCategory').value;
+            const useStandardDefaults = document.getElementById('defaultToStandardCheckbox').checked;
+
+            if (!nameInput) {
+                alert("Please enter a valid entity/lab name.");
+                return;
+            }
+
+            if (appData[targetCategory][nameInput]) {
+                alert("An entity with this name already exists in " + targetCategory.replace('_', ' ') + ".");
+                return;
+            }
+
+            const standardRef = appData[targetCategory]['Standard'] || appData['referral_in']['Standard'] || {};
+            const newPrices = {};
+
+            Object.keys(standardRef).forEach((test) => {
+                newPrices[test] = useStandardDefaults ? standardRef[test] : 0;
+            });
+
+            // Set state and write to DB
+            appData[targetCategory][nameInput] = newPrices;
+            db.ref(`${targetCategory}/${nameInput}`).set(newPrices)
+                .then(() => {
+                    closeAddEntityModal();
+                    if (currentTab !== targetCategory) {
+                        switchTab(targetCategory);
+                    } else {
+                        populateEntityDropdown();
+                        document.getElementById('entitySelect').value = nameInput;
+                        renderTable();
+                    }
+                })
+                .catch((err) => alert("Error creating entity: " + err.message));
+        }
+    </script>
 </body>
 </html>
