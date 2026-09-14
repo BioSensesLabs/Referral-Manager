@@ -64,12 +64,14 @@
         // Global State System Variables (Referral In)
         window.inEntities = [];
         window.inTestDatabase = {};
-        window.inCategories = {}; // Test Name -> Category mapping
+        window.inCategories = {}; 
         window.inCategoryList = ['General Chemistry', 'Hematology', 'Immunology & Serology', 'Endocrinology & Hormones', 'Tumor Markers', 'Microbiology'];
         window.inCurrentEditingRow = null;
         window.inCurrentInputMode = 'select';
 
-        // Populate baseline data for Referral In database from pre-loaded list
+        // Export State Tracker
+        window.pendingExportType = null; // 'excel' | 'word'
+
         function initializeReferralInDefaults() {
             window.referralInPresetTests.forEach(testName => {
                 let key = sanitizeCloudKey(testName);
@@ -121,7 +123,6 @@
             if (window.activeTab === 'in') logMessage("Cloud Read Failure (In): " + error.message, "error");
         });
 
-        // Push updates to Firebase Cloud Node based on Active Tab
         window.syncCloudStorage = function() {
             if (window.activeTab === 'out') {
                 set(dbRefOut, {
@@ -195,6 +196,36 @@
             </div>
         </div>
     </nav>
+
+    <!-- Export Modal Selection Popup -->
+    <div id="exportModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-5 border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div>
+                <h3 id="modalTitle" class="text-base font-bold text-slate-900">Configure Document Export</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Select whether to export all labs in a matrix view or a specific lab entity tailored for external sharing.</p>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Target Scope</label>
+                    <select id="exportScopeSelect" onchange="toggleModalLabSelector()" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="all">🌐 All Labs (Full Matrix Report)</option>
+                        <option value="single">🏢 Specific Lab / Entity Only</option>
+                    </select>
+                </div>
+
+                <div id="modalLabContainer" class="hidden">
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Select Lab Entity</label>
+                    <select id="modalLabDropdown" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button onclick="closeExportModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition">Cancel</button>
+                <button onclick="executeExport()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md shadow-indigo-100 transition">Download Document</button>
+            </div>
+        </div>
+    </div>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
         
@@ -307,10 +338,10 @@
                     <div class="relative w-full sm:w-60">
                         <input id="searchInput" type="text" oninput="renderTable()" placeholder="🔍 search test..." class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
                     </div>
-                    <button onclick="downloadExcelTable()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3.5 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
+                    <button onclick="openExportModal('excel')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3.5 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
                         📥 Excel
                     </button>
-                    <button onclick="downloadWordReport()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3.5 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
+                    <button onclick="openExportModal('word')" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3.5 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
                         📄 Word Report
                     </button>
                 </div>
@@ -762,6 +793,191 @@
             }
         }
 
+        // Export Modal Handler Logic
+        window.openExportModal = function(type) {
+            window.pendingExportType = type;
+            const currentEnts = getCurrentEntities();
+            const modalLabDropdown = document.getElementById('modalLabDropdown');
+            const modalTitle = document.getElementById('modalTitle');
+            
+            modalTitle.innerText = `Configure ${type === 'excel' ? 'Excel' : 'Word'} Export`;
+            modalLabDropdown.innerHTML = '';
+            
+            if (currentEnts.length === 0) {
+                alert("No lab entities available for selection.");
+                return;
+            }
+
+            currentEnts.forEach(ent => {
+                const opt = document.createElement('option');
+                opt.value = ent;
+                opt.textContent = ent;
+                modalLabDropdown.appendChild(opt);
+            });
+
+            document.getElementById('exportScopeSelect').value = 'all';
+            toggleModalLabSelector();
+            document.getElementById('exportModal').classList.remove('hidden');
+        }
+
+        window.closeExportModal = function() {
+            document.getElementById('exportModal').classList.add('hidden');
+            window.pendingExportType = null;
+        }
+
+        window.toggleModalLabSelector = function() {
+            const scope = document.getElementById('exportScopeSelect').value;
+            const container = document.getElementById('modalLabContainer');
+            if (scope === 'single') {
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        window.executeExport = function() {
+            const type = window.pendingExportType;
+            const scope = document.getElementById('exportScopeSelect').value;
+            const selectedLab = document.getElementById('modalLabDropdown').value;
+            closeExportModal();
+
+            if (type === 'excel') {
+                if (scope === 'all') downloadExcelTable();
+                else downloadSingleLabExcel(selectedLab);
+            } else if (type === 'word') {
+                if (scope === 'all') downloadWordReport();
+                else downloadSingleLabWord(selectedLab);
+            }
+        }
+
+        window.downloadSingleLabExcel = function(labName) {
+            const currentDb = getCurrentDatabase();
+            let exportData = [];
+
+            if (window.activeTab === 'in') {
+                exportData.push(["Category", "Test Name", `${labName} Price`]);
+                Object.keys(currentDb).sort().forEach(testKey => {
+                    let cat = window.inCategories[testKey] || "General Chemistry";
+                    let displayName = testKey.replace(/-/g, " ");
+                    let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
+                    exportData.push([cat, displayName, val]);
+                });
+            } else {
+                exportData.push(["Test Name", `${labName} Price`]);
+                Object.keys(currentDb).sort().forEach(testKey => {
+                    let displayName = testKey.replace(/-/g, " ");
+                    let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
+                    exportData.push([displayName, val]);
+                });
+            }
+
+            const worksheet = XLSX.utils.aoa_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, `${labName}_Prices`);
+            XLSX.writeFile(workbook, `BioSenses_${labName}_${window.activeTab === 'in' ? 'Referral_In' : 'Referral_Out'}_PriceList.xlsx`);
+            logMessage(`Excel sheet generated specifically for ${labName}.`, "success");
+        }
+
+        window.downloadSingleLabWord = function(labName) {
+            const currentDb = getCurrentDatabase();
+            const isReferralIn = window.activeTab === 'in';
+            const title = `BioSenses Price List — ${labName} (${isReferralIn ? 'Referral In' : 'Referral Out'})`;
+
+            let htmlContent = `
+                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head>
+                    <title>${title}</title>
+                    <style>
+                        body { font-family: 'Calibri', Arial, sans-serif; color: #1e293b; line-height: 1.5; padding: 20px; }
+                        h1 { color: #1e293b; font-size: 18px; border-bottom: 2px solid #4f46e5; padding-bottom: 6px; margin-bottom: 4px; }
+                        p.subtitle { font-size: 11px; color: #64748b; margin-bottom: 24px; font-weight: bold; }
+                        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px; }
+                        th { background-color: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
+                        td { border: 1px solid #cbd5e1; padding: 7px 10px; }
+                        .cat-header { background-color: #e0e7ff; color: #312e81; font-weight: bold; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
+                        .num { text-align: right; width: 120px; font-family: monospace; font-weight: bold; color: #0f172a; }
+                    </style>
+                </head>
+                <body>
+                    <h1>${title}</h1>
+                    <p class="subtitle">BioSenses Medical Laboratory Services | Issued: ${new Date().toLocaleDateString()}</p>
+            `;
+
+            let tests = Object.keys(currentDb);
+            if (tests.length === 0) {
+                htmlContent += `<p>No records found.</p>`;
+            } else if (isReferralIn) {
+                let grouped = {};
+                tests.forEach(testKey => {
+                    let cat = window.inCategories[testKey] || "General Chemistry";
+                    if (!grouped[cat]) grouped[cat] = [];
+                    grouped[cat].push(testKey);
+                });
+
+                Object.keys(grouped).sort().forEach(cat => {
+                    let catTests = grouped[cat];
+                    if (catTests.length === 0) return;
+
+                    htmlContent += `
+                        <table>
+                            <thead>
+                                <tr class="cat-header">
+                                    <th colspan="2">${cat} (${catTests.length} tests)</th>
+                                </tr>
+                                <tr>
+                                    <th>Test Name</th>
+                                    <th class="num">Agreed Price</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    catTests.sort().forEach(testKey => {
+                        let displayName = testKey.replace(/-/g, " ");
+                        let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
+                        htmlContent += `<tr>
+                            <td>${displayName}</td>
+                            <td class="num">${val.toFixed(2)}</td>
+                        </tr>`;
+                    });
+                    htmlContent += `</tbody></table>`;
+                });
+            } else {
+                htmlContent += `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Test Name</th>
+                                <th class="num">Agreed Price</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                tests.sort().forEach(testKey => {
+                    let displayName = testKey.replace(/-/g, " ");
+                    let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
+                    htmlContent += `<tr>
+                        <td>${displayName}</td>
+                        <td class="num">${val.toFixed(2)}</td>
+                    </tr>`;
+                });
+                htmlContent += `</tbody></table>`;
+            }
+
+            htmlContent += `</body></html>`;
+
+            const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `BioSenses_${labName}_${window.activeTab === 'in' ? 'Referral_In' : 'Referral_Out'}_Report.doc`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            logMessage(`Word document generated specifically for ${labName}.`, "success");
+        }
+
         window.downloadExcelTable = function() {
             const currentDb = getCurrentDatabase();
             const currentEnts = getCurrentEntities();
@@ -800,14 +1016,14 @@
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, window.activeTab === 'in' ? "Referral_In_Prices" : "Referral_Out_Prices");
             XLSX.writeFile(workbook, `BioSenses_${window.activeTab === 'in' ? 'Referral_In' : 'Referral_Out'}_Matrix.xlsx`);
-            logMessage("Excel file generated and downloaded successfully.", "success");
+            logMessage("Excel full matrix file generated and downloaded successfully.", "success");
         }
 
         window.downloadWordReport = function() {
             const currentDb = getCurrentDatabase();
             const currentEnts = getCurrentEntities();
             const isReferralIn = window.activeTab === 'in';
-            const title = isReferralIn ? "BioSenses - Referral In Pricing Structure" : "BioSenses - Referral Out Pricing Structure";
+            const title = isReferralIn ? "BioSenses - Referral In Pricing Structure (Full Matrix)" : "BioSenses - Referral Out Pricing Structure (Full Matrix)";
 
             let htmlContent = `
                 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -890,14 +1106,13 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `BioSenses_${isReferralIn ? 'Referral_In' : 'Referral_Out'}_Report.doc`;
+            a.download = `BioSenses_${isReferralIn ? 'Referral_In' : 'Referral_Out'}_Matrix_Report.doc`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            logMessage("Word report generated and downloaded successfully.", "success");
+            logMessage("Word matrix report generated and downloaded successfully.", "success");
         }
 
-        // Initial launch hook
         window.addEventListener('DOMContentLoaded', () => {
             initializeReferralInDefaults();
             initSystem();
