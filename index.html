@@ -303,12 +303,15 @@
                     <h2 class="text-lg font-bold text-slate-900" id="tableHeadingTitle">Master Referral and Pricing View</h2>
                     <p class="text-xs text-slate-400">Review structural rates matrices. Real-time updates active.</p>
                 </div>
-                <div class="flex gap-2 w-full sm:w-auto items-center justify-end">
-                    <div class="relative w-full sm:w-72">
+                <div class="flex flex-wrap gap-2 w-full sm:w-auto items-center justify-end">
+                    <div class="relative w-full sm:w-60">
                         <input id="searchInput" type="text" oninput="renderTable()" placeholder="🔍 search test..." class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
                     </div>
-                    <button onclick="downloadExcelTable()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
-                        📥 Download Excel
+                    <button onclick="downloadExcelTable()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3.5 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
+                        📥 Excel
+                    </button>
+                    <button onclick="downloadWordReport()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3.5 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
+                        📄 Word Report
                     </button>
                 </div>
             </div>
@@ -486,7 +489,6 @@
                         const currentDb = getCurrentDatabase();
                         const currentEnts = getCurrentEntities();
 
-                        // Detect format based on header columns
                         const headerRow = rawRows[0].map(h => String(h).trim().toLowerCase());
                         const isReferralInWithCategory = window.activeTab === 'in' && headerRow.includes('category');
 
@@ -522,7 +524,6 @@
                                     window.inCategories[testKey] = rawCategory || "General Chemistry";
                                 }
 
-                                // Map entities starting from startIndex
                                 currentEnts.forEach((ent, index) => {
                                     let cellVal = row[startIndex + index];
                                     currentDb[testKey][ent] = cellVal !== undefined && !isNaN(parseFloat(cellVal)) ? parseFloat(cellVal) : 0;
@@ -699,7 +700,6 @@
             }
 
             if (window.activeTab === 'in') {
-                // Group by category
                 let grouped = {};
                 tests.forEach(testKey => {
                     let cat = window.inCategories[testKey] || "General Chemistry";
@@ -801,6 +801,100 @@
             XLSX.utils.book_append_sheet(workbook, worksheet, window.activeTab === 'in' ? "Referral_In_Prices" : "Referral_Out_Prices");
             XLSX.writeFile(workbook, `BioSenses_${window.activeTab === 'in' ? 'Referral_In' : 'Referral_Out'}_Matrix.xlsx`);
             logMessage("Excel file generated and downloaded successfully.", "success");
+        }
+
+        window.downloadWordReport = function() {
+            const currentDb = getCurrentDatabase();
+            const currentEnts = getCurrentEntities();
+            const isReferralIn = window.activeTab === 'in';
+            const title = isReferralIn ? "BioSenses - Referral In Pricing Structure" : "BioSenses - Referral Out Pricing Structure";
+
+            let htmlContent = `
+                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head>
+                    <title>${title}</title>
+                    <style>
+                        body { font-family: 'Calibri', Arial, sans-serif; color: #333333; line-height: 1.4; }
+                        h1 { color: #1e293b; font-size: 20px; border-bottom: 2px solid #4f46e5; padding-bottom: 6px; }
+                        p.date { font-size: 11px; color: #64748b; margin-bottom: 20px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+                        th { background-color: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+                        td { border: 1px solid #cbd5e1; padding: 6px 8px; }
+                        .cat-header { background-color: #e0e7ff; color: #312e81; font-weight: bold; text-transform: uppercase; font-size: 10px; }
+                        .num { text-align: right; }
+                    </style>
+                </head>
+                <body>
+                    <h1>${title}</h1>
+                    <p class="date">Generated on: ${new Date().toLocaleDateString()} | BioSenses Medical Laboratory</p>
+            `;
+
+            let tests = Object.keys(currentDb);
+            if (tests.length === 0) {
+                htmlContent += `<p>No records found.</p>`;
+            } else if (isReferralIn) {
+                let grouped = {};
+                tests.forEach(testKey => {
+                    let cat = window.inCategories[testKey] || "General Chemistry";
+                    if (!grouped[cat]) grouped[cat] = [];
+                    grouped[cat].push(testKey);
+                });
+
+                Object.keys(grouped).sort().forEach(cat => {
+                    let catTests = grouped[cat];
+                    if (catTests.length === 0) return;
+
+                    htmlContent += `
+                        <table>
+                            <thead>
+                                <tr class="cat-header">
+                                    <th colspan="${currentEnts.length + 1}">${cat} (${catTests.length} tests)</th>
+                                </tr>
+                                <tr>
+                                    <th>Test Name</th>
+                    `;
+                    currentEnts.forEach(ent => { htmlContent += `<th class="num">${ent}</th>`; });
+                    htmlContent += `</tr></thead><tbody>`;
+
+                    catTests.sort().forEach(testKey => {
+                        let displayName = testKey.replace(/-/g, " ");
+                        htmlContent += `<tr><td>${displayName}</td>`;
+                        currentEnts.forEach(ent => {
+                            let val = currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0;
+                            htmlContent += `<td class="num">${val.toFixed(2)}</td>`;
+                        });
+                        htmlContent += `</tr>`;
+                    });
+                    htmlContent += `</tbody></table><br/>`;
+                });
+            } else {
+                htmlContent += `<table><thead><tr><th>Test Name</th>`;
+                currentEnts.forEach(ent => { htmlContent += `<th class="num">${ent}</th>`; });
+                htmlContent += `</tr></thead><tbody>`;
+
+                tests.sort().forEach(testKey => {
+                    let displayName = testKey.replace(/-/g, " ");
+                    htmlContent += `<tr><td>${displayName}</td>`;
+                    currentEnts.forEach(ent => {
+                        let val = currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0;
+                        htmlContent += `<td class="num">${val.toFixed(2)}</td>`;
+                    });
+                    htmlContent += `</tr>`;
+                });
+                htmlContent += `</tbody></table>`;
+            }
+
+            htmlContent += `</body></html>`;
+
+            const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `BioSenses_${isReferralIn ? 'Referral_In' : 'Referral_Out'}_Report.doc`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            logMessage("Word report generated and downloaded successfully.", "success");
         }
 
         // Initial launch hook
