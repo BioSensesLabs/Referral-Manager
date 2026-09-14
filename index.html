@@ -853,7 +853,7 @@
             logMessage(`Excel sheet generated specifically for ${labName}.`, "success");
         }
 
-        // Updated Word Template Export matching your precise template styling
+        // Exact match with your uploaded template format (Category header with colspan=4, Test name, Price, Sample Type, TAT)
         window.downloadSingleLabWord = function(labName) {
             const currentDb = getCurrentDatabase();
             const isReferralIn = window.activeTab === 'in';
@@ -882,20 +882,19 @@
                             }
                         }
                         body { font-family: 'Calibri', Arial, sans-serif; color: #1e293b; line-height: 1.4; padding: 10px; }
-                        h1 { color: #0f172a; font-size: 18px; font-weight: bold; margin-bottom: 2px; }
-                        p.subtitle { font-size: 11px; color: #475569; margin-bottom: 18px; font-weight: normal; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 6px; }
-                        table { width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 10.5px; }
-                        th { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; font-weight: bold; }
-                        td { border: 1px solid #cbd5e1; padding: 5px 8px; }
-                        .cat-header { background-color: #e2e8f0; color: #0f172a; font-weight: bold; font-size: 11px; }
-                        .num { text-align: right; width: 80px; }
-                        .col-sample { width: 110px; }
-                        .col-tat { width: 90px; }
+                        h1 { color: #0f172a; font-size: 16px; font-weight: bold; margin-bottom: 2px; }
+                        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10.5px; }
+                        th { border: 1px solid #94a3b8; padding: 5px 8px; text-align: left; font-weight: bold; background-color: #f1f5f9; }
+                        td { border: 1px solid #cbd5e1; padding: 4px 8px; }
+                        .cat-row { background-color: #f8fafc; font-weight: bold; color: #0f172a; }
+                        .col-name { width: 45%; }
+                        .col-price { width: 15%; text-align: right; }
+                        .col-sample { width: 25%; }
+                        .col-tat { width: 15%; }
                     </style>
                 </head>
                 <body>
                     <h1>${title}</h1>
-                    <p class="subtitle">Biochemistry & Core Laboratory Services | BioSenses Medical Laboratory</p>
             `;
 
             let tests = Object.keys(currentDb);
@@ -916,12 +915,12 @@
                     htmlContent += `
                         <table>
                             <thead>
-                                <tr class="cat-header">
+                                <tr class="cat-row">
                                     <th colspan="4">${cat}</th>
                                 </tr>
                                 <tr>
-                                    <th>Test name</th>
-                                    <th class="num">Price</th>
+                                    <th class="col-name">Test name</th>
+                                    <th class="col-price">Price</th>
                                     <th class="col-sample">Sample Type</th>
                                     <th class="col-tat">TAT</th>
                                 </tr>
@@ -933,10 +932,10 @@
                         let displayName = testKey.replace(/-/g, " ");
                         let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
                         htmlContent += `<tr>
-                            <td>${displayName}</td>
-                            <td class="num">${val.toFixed(2)}</td>
-                            <td>Serum</td>
-                            <td>Daily</td>
+                            <td class="col-name">${displayName}</td>
+                            <td class="col-price" style="text-align: right;">${val.toFixed(2)}</td>
+                            <td class="col-sample">Serum</td>
+                            <td class="col-tat">Daily</td>
                         </tr>`;
                     });
                     htmlContent += `</tbody></table>`;
@@ -946,8 +945,8 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>Test name</th>
-                                <th class="num">Price</th>
+                                <th class="col-name">Test name</th>
+                                <th class="col-price">Price</th>
                                 <th class="col-sample">Sample Type</th>
                                 <th class="col-tat">TAT</th>
                             </tr>
@@ -959,10 +958,10 @@
                     let displayName = testKey.replace(/-/g, " ");
                     let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
                     htmlContent += `<tr>
-                        <td>${displayName}</td>
-                        <td class="num">${val.toFixed(2)}</td>
-                        <td>Serum</td>
-                        <td>Daily</td>
+                        <td class="col-name">${displayName}</td>
+                        <td class="col-price" style="text-align: right;">${val.toFixed(2)}</td>
+                        <td class="col-sample">Serum</td>
+                        <td class="col-tat">Daily</td>
                     </tr>`;
                 });
                 htmlContent += `</tbody></table>`;
