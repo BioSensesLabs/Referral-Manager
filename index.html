@@ -64,6 +64,8 @@
         // Global State System Variables (Referral In)
         window.inEntities = [];
         window.inTestDatabase = {};
+        window.inCategories = {}; // Test Name -> Category mapping
+        window.inCategoryList = ['General Chemistry', 'Hematology', 'Immunology & Serology', 'Endocrinology & Hormones', 'Tumor Markers', 'Microbiology'];
         window.inCurrentEditingRow = null;
         window.inCurrentInputMode = 'select';
 
@@ -73,6 +75,9 @@
                 let key = sanitizeCloudKey(testName);
                 if (!window.inTestDatabase[key]) {
                     window.inTestDatabase[key] = {};
+                }
+                if (!window.inCategories[key]) {
+                    window.inCategories[key] = "General Chemistry";
                 }
             });
         }
@@ -100,9 +105,12 @@
             if (data) {
                 window.inEntities = data.entities || [];
                 window.inTestDatabase = data.database || {};
+                window.inCategories = data.categories || {};
+                window.inCategoryList = data.categoryList || window.inCategoryList;
             } else {
                 window.inEntities = [];
                 window.inTestDatabase = {};
+                window.inCategories = {};
             }
             initializeReferralInDefaults();
             if (window.activeTab === 'in') {
@@ -127,7 +135,9 @@
             } else {
                 set(dbRefIn, {
                     entities: window.inEntities,
-                    database: window.inTestDatabase
+                    database: window.inTestDatabase,
+                    categories: window.inCategories,
+                    categoryList: window.inCategoryList
                 }).then(() => {
                     logMessage("Cloud broadcast complete (Referral In). Synchronization applied.", "success");
                 }).catch((err) => {
@@ -143,6 +153,7 @@
                     window.testDatabase = {};
                 } else {
                     window.inTestDatabase = {};
+                    window.inCategories = {};
                     initializeReferralInDefaults();
                 }
                 window.syncCloudStorage();
@@ -237,6 +248,15 @@
                             + Add New Lab
                         </button>
                     </div>
+                    <div id="categoryManagerContainer" class="pt-2 hidden">
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Manage Categories</label>
+                        <div class="flex gap-2">
+                            <input id="newCategoryInput" type="text" placeholder="New category name..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
+                            <button onclick="addNewCategory()" class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-2 rounded-lg transition shrink-0 shadow-sm">
+                                + Add Category
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex-[2] md:pl-6 space-y-4">
@@ -260,7 +280,11 @@
                                 </select>
                                 <input id="testTextInput" type="text" placeholder="Enter new test name..." class="hidden w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
                             </div>
-                            <div id="dynamicFormPrices" class="sm:col-span-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-24 overflow-y-auto pr-1"></div>
+                            <div id="categoryWrapper" class="sm:col-span-1 hidden">
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">Category</label>
+                                <select id="categoryDropdown" class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-slate-50/50 outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                            </div>
+                            <div id="dynamicFormPrices" class="sm:col-span-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-24 overflow-y-auto pr-1"></div>
                         </div>
                         <div class="flex justify-end">
                             <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm px-6 py-2 rounded-lg transition shadow-md shadow-indigo-100">
@@ -305,15 +329,21 @@
             const tabOutBtn = document.getElementById('tabOutBtn');
             const tabInBtn = document.getElementById('tabInBtn');
             const headingTitle = document.getElementById('tableHeadingTitle');
+            const catManagerContainer = document.getElementById('categoryManagerContainer');
+            const catWrapper = document.getElementById('categoryWrapper');
 
             if (tab === 'out') {
                 tabOutBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center gap-2";
                 tabInBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all flex items-center gap-2";
                 headingTitle.innerText = "Master Referral Out Pricing View";
+                if(catManagerContainer) catManagerContainer.classList.add('hidden');
+                if(catWrapper) catWrapper.classList.add('hidden');
             } else {
                 tabInBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center gap-2";
                 tabOutBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all flex items-center gap-2";
                 headingTitle.innerText = "Master Referral In Pricing View";
+                if(catManagerContainer) catManagerContainer.classList.remove('hidden');
+                if(catWrapper) catWrapper.classList.remove('hidden');
             }
             initSystem();
         }
@@ -351,16 +381,6 @@
             return keyStr.replace(/[\.\#\$\/\[\]]/g, "-");
         }
 
-        function validateNameChange(oldName, newName) {
-            if (!newName || newName.trim() === "") return { valid: false, msg: "Test name cannot be empty." };
-            let sanitized = sanitizeCloudKey(newName.trim());
-            let db = getCurrentDatabase();
-            if (sanitized !== oldName && db[sanitized]) {
-                return { valid: false, msg: "A test with this name already exists." };
-            }
-            return { valid: true, sanitized: sanitized };
-        }
-
         function initSystem() {
             const currentDb = getCurrentDatabase();
             const currentEnts = getCurrentEntities();
@@ -370,7 +390,7 @@
                 let statusInfo = Object.keys(currentDb).length > 0 
                     ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${Object.keys(currentDb).length} tests initialized)</span>`
                     : '';
-                
+                 
                 uploadSection.className = "bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5";
                 uploadSection.innerHTML = `
                     <label class="block flex flex-col cursor-pointer gap-1.5">
@@ -388,6 +408,7 @@
             document.getElementById('statEntities').innerText = currentEnts.length.toLocaleString();
 
             renderDropdown();
+            renderCategoryDropdown();
             renderFormFields();
             renderTable();
         }
@@ -414,13 +435,41 @@
                 btnCreate.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
             }
             document.getElementById('priceForm').reset();
-            getCurrentEntities().forEach(ent => document.getElementById(`form-price-${ent}`).value = 0);
+            getCurrentEntities().forEach(ent => {
+                const el = document.getElementById(`form-price-${ent}`);
+                if(el) el.value = 0;
+            });
+        }
+
+        function addNewCategory() {
+            const input = document.getElementById('newCategoryInput');
+            let catName = input.value.trim();
+            if(!catName) return;
+            if(!window.inCategoryList.includes(catName)) {
+                window.inCategoryList.push(catName);
+                window.syncCloudStorage();
+                renderCategoryDropdown();
+                input.value = '';
+                logMessage(`Category "${catName}" added successfully.`, "success");
+            }
+        }
+
+        function renderCategoryDropdown() {
+            const dropdown = document.getElementById('categoryDropdown');
+            if(!dropdown) return;
+            dropdown.innerHTML = '';
+            window.inCategoryList.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                dropdown.appendChild(opt);
+            });
         }
 
         function bindExcelUploadListener() {
             const fileInput = document.getElementById('excelFile');
             if(!fileInput) return;
-            
+             
             fileInput.addEventListener('change', function(e) {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -432,30 +481,56 @@
                         const workbook = XLSX.read(data, { type: 'binary' });
                         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                         const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                        
+                         
                         if (rawRows.length <= 1) return;
                         const currentDb = getCurrentDatabase();
                         const currentEnts = getCurrentEntities();
 
+                        // Detect format based on header columns
+                        const headerRow = rawRows[0].map(h => String(h).trim().toLowerCase());
+                        const isReferralInWithCategory = window.activeTab === 'in' && headerRow.includes('category');
+
                         for (let i = 1; i < rawRows.length; i++) {
                             const row = rawRows[i];
                             if (!row || row.length === 0) continue;
-                            let rawTestName = row[0] ? String(row[0]).trim() : "";
-                            let basePrice = row[1] ? parseFloat(row[1]) : 0;
+
+                            let rawTestName = "";
+                            let rawCategory = "General Chemistry";
+                            let startIndex = 1;
+
+                            if (isReferralInWithCategory) {
+                                rawCategory = row[0] ? String(row[0]).trim() : "General Chemistry";
+                                rawTestName = row[1] ? String(row[1]).trim() : "";
+                                startIndex = 2;
+                                if (!window.inCategoryList.includes(rawCategory) && rawCategory) {
+                                    window.inCategoryList.push(rawCategory);
+                                }
+                            } else {
+                                rawTestName = row[0] ? String(row[0]).trim() : "";
+                                startIndex = 1;
+                            }
 
                             if (rawTestName && rawTestName !== "undefined" && rawTestName !== "") {
-                                let testName = sanitizeCloudKey(rawTestName);
+                                let testKey = sanitizeCloudKey(rawTestName);
 
-                                if (!currentDb[testName]) {
-                                    currentDb[testName] = {};
-                                    currentEnts.forEach(ent => currentDb[testName][ent] = 0);
+                                if (!currentDb[testKey]) {
+                                    currentDb[testKey] = {};
+                                    currentEnts.forEach(ent => currentDb[testKey][ent] = 0);
                                 }
-                                if (currentEnts.length > 0) {
-                                    currentDb[testName][currentEnts[0]] = isNaN(basePrice) ? 0 : basePrice;
+
+                                if (window.activeTab === 'in') {
+                                    window.inCategories[testKey] = rawCategory || "General Chemistry";
                                 }
+
+                                // Map entities starting from startIndex
+                                currentEnts.forEach((ent, index) => {
+                                    let cellVal = row[startIndex + index];
+                                    currentDb[testKey][ent] = cellVal !== undefined && !isNaN(parseFloat(cellVal)) ? parseFloat(cellVal) : 0;
+                                });
                             }
                         }
                         window.syncCloudStorage();
+                        logMessage("Excel file successfully parsed and imported.", "success");
                     } catch (parseError) {
                         logMessage("Fail compilation spreadsheet upload parsing: " + parseError.message, "error");
                     }
@@ -542,8 +617,13 @@
 
                 if(!testName || mode !== 'select') return;
                 currentEnts.forEach(ent => {
-                    document.getElementById(`form-price-${ent}`).value = currentDb[testName][ent] || 0;
+                    const el = document.getElementById(`form-price-${ent}`);
+                    if(el) el.value = currentDb[testName][ent] || 0;
                 });
+                if (window.activeTab === 'in' && window.inCategories[testName]) {
+                    const catDropdown = document.getElementById('categoryDropdown');
+                    if(catDropdown) catDropdown.value = window.inCategories[testName];
+                }
             }
         });
 
@@ -564,198 +644,170 @@
                 currentEnts.forEach(ent => currentDb[testName][ent] = 0);
             }
 
+            if (window.activeTab === 'in') {
+                const catDropdown = document.getElementById('categoryDropdown');
+                if(catDropdown) {
+                    window.inCategories[testName] = catDropdown.value;
+                }
+            }
+
             currentEnts.forEach(ent => {
-                currentDb[testName][ent] = parseFloat(document.getElementById(`form-price-${ent}`).value) || 0;
+                const el = document.getElementById(`form-price-${ent}`);
+                currentDb[testName][ent] = el ? (parseFloat(el.value) || 0) : 0;
             });
 
             window.syncCloudStorage();
-            document.getElementById('testTextInput').value = "";
+            const textInput = document.getElementById('testTextInput');
+            if(textInput) textInput.value = "";
             document.getElementById('priceForm').reset();
-            currentEnts.forEach(ent => document.getElementById(`form-price-${ent}`).value = 0);
+            currentEnts.forEach(ent => {
+                const el = document.getElementById(`form-price-${ent}`);
+                if(el) el.value = 0;
+            });
         }
 
         function renderTable() {
             const header = document.getElementById('tableHeader');
             const body = document.getElementById('tableBody');
             if(!header || !body) return;
-            
+             
             const searchStr = document.getElementById('searchInput').value.toLowerCase();
             const currentDb = getCurrentDatabase();
             const currentEnts = getCurrentEntities();
-            const activeEditingRow = window.activeTab === 'out' ? window.currentEditingRow : window.inCurrentEditingRow;
 
-            let headerHTML = `<tr><th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Test Name</th>`;
-            currentEnts.forEach(ent => { 
-                headerHTML += `
-                    <th class="px-2 py-3 w-28 text-slate-700 font-bold border-b bg-slate-50">
-                        <div class="flex items-center gap-1 justify-between">
-                            <span class="truncate" title="${ent}">${ent}</span>
-                            <button onclick="window.deleteOperationalEntity('${ent}')" class="text-slate-300 hover:text-rose-600 text-[9px] p-0.5 rounded transition-colors" title="Delete Entity">❌</button>
-                        </div>
-                    </th>`; 
-            });
-            headerHTML += `<th class="px-3 py-3 w-36 text-center text-slate-700 font-bold sticky right-0 bg-slate-50 border-b z-20 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">Actions</th></tr>`;
-            header.innerHTML = headerHTML;
-
-            body.innerHTML = '';
-            const filteredTests = Object.keys(currentDb).filter(test => test.toLowerCase().includes(searchStr)).sort();
-
-            if(filteredTests.length === 0) {
-                body.innerHTML = `<tr><td colspan="${currentEnts.length + 2}" class="text-center p-12 text-slate-400 font-medium">No records match current search parameters.</td></tr>`;
-                return;
+            let headerHTML = `<tr>`;
+            if (window.activeTab === 'in') {
+                headerHTML += `<th class="px-3 py-3 w-40 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Category</th>`;
+                headerHTML += `<th class="px-3 py-3 w-64 text-slate-700 font-bold bg-slate-50 sticky left-40 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Test Name</th>`;
+            } else {
+                headerHTML += `<th class="px-3 py-3 w-80 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Test Name</th>`;
             }
-
-            filteredTests.forEach(test => {
-                const tr = document.createElement('tr');
-                const isEditing = (activeEditingRow === test);
-                
-                tr.className = isEditing 
-                    ? "bg-indigo-50/50 border-y-2 border-indigo-400 font-medium transition-colors" 
-                    : "hover:bg-slate-50/80 transition-colors border-b border-slate-100 bg-white";
-
-                let rowHTML = "";
-                if (isEditing) {
-                    rowHTML += `
-                    <td class="px-2 py-1.5 sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">
-                        <input type="text" value="${test}" id="inline-edit-testname" class="w-full border border-indigo-400 rounded px-2 py-1 text-xs font-semibold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500">
-                    </td>`;
-                } else {
-                    rowHTML += `<td class="px-3 py-2 font-semibold text-slate-900 break-words sticky left-0 bg-inherit z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100">${test}</td>`;
-                }
-                
-                let pricesArr = [];
-                currentEnts.forEach(ent => {
-                    const val = currentDb[test][ent] !== undefined ? parseFloat(currentDb[test][ent]) : 0;
-                    pricesArr.push(val);
-                });
-
-                let minVal = pricesArr.length > 0 ? Math.min(...pricesArr) : 0;
-                let maxVal = pricesArr.length > 0 ? Math.max(...pricesArr) : 0;
-                let allEqual = pricesArr.length === 0 || pricesArr.every(v => v === pricesArr[0]);
-
-                currentEnts.forEach(ent => {
-                    const price = currentDb[test][ent] !== undefined ? parseFloat(currentDb[test][ent]) : 0;
-                    
-                    let cellBgClass = "";
-                    if (!allEqual && !isEditing) {
-                        if (price === minVal) cellBgClass = "bg-emerald-100 text-emerald-900 font-bold rounded-xs shadow-xs";
-                        else if (price === maxVal) cellBgClass = "bg-rose-100 text-rose-900 font-bold rounded-xs shadow-xs";
-                    }
-
-                    rowHTML += isEditing 
-                        ? `<td class="px-1.5 py-1.5"><input type="number" step="0.01" value="${price}" id="inline-edit-${ent}" class="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-xs font-mono font-bold bg-white text-slate-900 shadow-inner outline-none focus:ring-1 focus:ring-indigo-500"></td>`
-                        : `<td class="px-2 py-2 font-mono text-slate-600 transition-colors ${cellBgClass}">${Number(price).toFixed(2)}</td>`;
-                });
-                
-                tr.innerHTML = rowHTML;
-
-                const tdActions = document.createElement('td');
-                tdActions.className = "px-3 py-2 text-center space-x-1.5 whitespace-nowrap sticky right-0 bg-inherit z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] border-l border-slate-100";
-
-                if (isEditing) {
-                    const saveBtn = document.createElement('button');
-                    saveBtn.className = "bg-indigo-600 text-white hover:bg-indigo-700 px-2 py-1 text-[10px] font-bold rounded shadow-sm transition-colors";
-                    saveBtn.innerText = "Save"; saveBtn.dataset.oldTestName = test;
-                    saveBtn.addEventListener('click', function() { saveInlineRowChanges(this.dataset.oldTestName); });
-
-                    const cancelBtn = document.createElement('button');
-                    cancelBtn.className = "bg-slate-200 text-slate-700 hover:bg-slate-300 px-2 py-1 text-[10px] font-bold rounded transition-colors";
-                    cancelBtn.innerText = "Cancel";
-                    cancelBtn.addEventListener('click', function() { 
-                        if (window.activeTab === 'out') window.currentEditingRow = null; 
-                        else window.inCurrentEditingRow = null;
-                        renderTable(); 
-                    });
-
-                    tdActions.appendChild(saveBtn); tdActions.appendChild(cancelBtn);
-                } else {
-                    const editBtn = document.createElement('button');
-                    editBtn.className = "text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 px-2 py-0.5 rounded text-[11px] font-bold transition-all";
-                    editBtn.innerText = "Edit"; editBtn.dataset.testName = test;
-                    editBtn.addEventListener('click', function() { 
-                        if (window.activeTab === 'out') window.currentEditingRow = this.dataset.testName; 
-                        else window.inCurrentEditingRow = this.dataset.testName;
-                        renderTable(); 
-                    });
-
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.className = "text-rose-600 hover:text-rose-900 hover:bg-rose-50 border border-transparent hover:border-rose-100 px-2 py-0.5 rounded text-[11px] font-bold transition-all";
-                    deleteBtn.innerText = "Delete"; deleteBtn.dataset.testName = test;
-                    deleteBtn.addEventListener('click', function() { handleDeleteClick(this.dataset.testName); });
-
-                    tdActions.appendChild(editBtn); tdActions.appendChild(deleteBtn);
-                }
-                tr.appendChild(tdActions); body.appendChild(tr);
-            });
-        }
-
-        function saveInlineRowChanges(oldTestName) {
-            const nameField = document.getElementById('inline-edit-testname');
-            if(!nameField) return;
-
-            let check = validateNameChange(oldTestName, nameField.value);
-            if(!check.valid) {
-                alert(check.msg);
-                return;
-            }
-
-            let newSanitizedName = check.sanitized;
-            let targetRowData = {};
-            const currentEnts = getCurrentEntities();
-            const currentDb = getCurrentDatabase();
 
             currentEnts.forEach(ent => {
-                const el = document.getElementById(`inline-edit-${ent}`);
-                targetRowData[ent] = el ? parseFloat(el.value) || 0 : 0;
+                headerHTML += `<th class="px-3 py-3 text-slate-700 font-bold border-b text-right">${ent} <button onclick="deleteOperationalEntity('${ent}')" class="text-rose-500 hover:text-rose-700 ml-1 font-normal">×</button></th>`;
             });
+            headerHTML += `<th class="px-3 py-3 text-slate-700 font-bold border-b text-center w-20">Action</th></tr>`;
+            header.innerHTML = headerHTML;
 
-            if (oldTestName !== newSanitizedName) {
-                delete currentDb[oldTestName];
-            }
-            currentDb[newSanitizedName] = targetRowData;
+            let bodyHTML = "";
+            let tests = Object.keys(currentDb);
 
-            if (window.activeTab === 'out') window.currentEditingRow = null;
-            else window.inCurrentEditingRow = null;
-
-            window.syncCloudStorage();
-        }
-
-        function handleDeleteClick(testName) {
-            if (confirm(`Are you sure you want to delete test "${testName}"?`)) {
-                const currentDb = getCurrentDatabase();
-                delete currentDb[testName];
-                window.syncCloudStorage();
-            }
-        }
-
-        function downloadExcelTable() {
-            const currentDb = getCurrentDatabase();
-            const currentEnts = getCurrentEntities();
-            const sortedTests = Object.keys(currentDb).sort();
-            
-            if (sortedTests.length === 0) {
-                alert("No data available to export.");
+            if (tests.length === 0) {
+                let colSpan = currentEnts.length + (window.activeTab === 'in' ? 3 : 2);
+                body.innerHTML = `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-slate-400 italic">No tests found in database.</td></tr>`;
                 return;
             }
 
-            const excelRows = [];
-            const headerRow = ["Test Name", ...currentEnts];
-            excelRows.push(headerRow);
-
-            sortedTests.forEach(test => {
-                const row = [test];
-                currentEnts.forEach(ent => {
-                    row.push(currentDb[test][ent] !== undefined ? currentDb[test][ent] : 0);
+            if (window.activeTab === 'in') {
+                // Group by category
+                let grouped = {};
+                tests.forEach(testKey => {
+                    let cat = window.inCategories[testKey] || "General Chemistry";
+                    if (!grouped[cat]) grouped[cat] = [];
+                    grouped[cat].push(testKey);
                 });
-                excelRows.push(row);
-            });
 
-            const worksheet = XLSX.utils.aoa_to_sheet(excelRows);
-            const workbook = XLSX.utils.book_new();
-            const tabLabel = window.activeTab === 'out' ? "Referral_Out" : "Referral_In";
-            XLSX.utils.book_append_sheet(workbook, worksheet, tabLabel);
-            XLSX.writeFile(workbook, `BioSenses_${tabLabel}_Pricing.xlsx`);
+                Object.keys(grouped).sort().forEach(cat => {
+                    let catTests = grouped[cat].filter(t => t.toLowerCase().includes(searchStr) || cat.toLowerCase().includes(searchStr));
+                    if (catTests.length === 0) return;
+
+                    bodyHTML += `<tr class="bg-indigo-50/60 font-bold text-indigo-900"><td colspan="${currentEnts.length + 3}" class="px-3 py-2 uppercase text-[11px] tracking-wider border-y border-indigo-100">${cat} (${catTests.length})</td></tr>`;
+
+                    catTests.sort().forEach(testKey => {
+                        let displayName = testKey.replace(/-/g, " ");
+                        bodyHTML += `<tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="px-3 py-2.5 font-medium text-slate-500 sticky left-0 bg-white z-10 border-b border-slate-100">${cat}</td>
+                            <td class="px-3 py-2.5 font-semibold text-slate-800 sticky left-40 bg-white z-10 border-b border-slate-100">${displayName}</td>`;
+                        
+                        currentEnts.forEach(ent => {
+                            let val = currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0;
+                            bodyHTML += `<td class="px-3 py-2.5 text-right font-mono text-slate-600 border-b border-slate-100">${val.toFixed(2)}</td>`;
+                        });
+
+                        bodyHTML += `<td class="px-3 py-2.5 text-center border-b border-slate-100">
+                            <button onclick="deleteTestEntry('${testKey}')" class="text-rose-500 hover:text-rose-700 text-xs font-semibold">Delete</button>
+                        </td></tr>`;
+                    });
+                });
+            } else {
+                tests.filter(t => t.toLowerCase().includes(searchStr)).sort().forEach(testKey => {
+                    let displayName = testKey.replace(/-/g, " ");
+                    bodyHTML += `<tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="px-3 py-2.5 font-semibold text-slate-800 sticky left-0 bg-white z-10 border-b border-slate-100">${displayName}</td>`;
+                    
+                    currentEnts.forEach(ent => {
+                        let val = currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0;
+                        bodyHTML += `<td class="px-3 py-2.5 text-right font-mono text-slate-600 border-b border-slate-100">${val.toFixed(2)}</td>`;
+                    });
+
+                    bodyHTML += `<td class="px-3 py-2.5 text-center border-b border-slate-100">
+                        <button onclick="deleteTestEntry('${testKey}')" class="text-rose-500 hover:text-rose-700 text-xs font-semibold">Delete</button>
+                    </td></tr>`;
+                });
+            }
+
+            body.innerHTML = bodyHTML;
         }
+
+        window.deleteTestEntry = function(testKey) {
+            if(confirm(`Are you sure you want to delete test "${testKey.replace(/-/g, " ")}"?`)) {
+                let currentDb = getCurrentDatabase();
+                if(currentDb[testKey]) {
+                    delete currentDb[testKey];
+                    if(window.activeTab === 'in' && window.inCategories[testKey]) {
+                        delete window.inCategories[testKey];
+                    }
+                    window.syncCloudStorage();
+                }
+            }
+        }
+
+        window.downloadExcelTable = function() {
+            const currentDb = getCurrentDatabase();
+            const currentEnts = getCurrentEntities();
+            let exportData = [];
+
+            if (window.activeTab === 'in') {
+                let headers = ["Category", "Test Name"];
+                currentEnts.forEach(ent => headers.push(ent));
+                exportData.push(headers);
+
+                Object.keys(currentDb).sort().forEach(testKey => {
+                    let cat = window.inCategories[testKey] || "General Chemistry";
+                    let displayName = testKey.replace(/-/g, " ");
+                    let row = [cat, displayName];
+                    currentEnts.forEach(ent => {
+                        row.push(currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0);
+                    });
+                    exportData.push(row);
+                });
+            } else {
+                let headers = ["Test Name"];
+                currentEnts.forEach(ent => headers.push(ent));
+                exportData.push(headers);
+
+                Object.keys(currentDb).sort().forEach(testKey => {
+                    let displayName = testKey.replace(/-/g, " ");
+                    let row = [displayName];
+                    currentEnts.forEach(ent => {
+                        row.push(currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0);
+                    });
+                    exportData.push(row);
+                });
+            }
+
+            const worksheet = XLSX.utils.aoa_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, window.activeTab === 'in' ? "Referral_In_Prices" : "Referral_Out_Prices");
+            XLSX.writeFile(workbook, `BioSenses_${window.activeTab === 'in' ? 'Referral_In' : 'Referral_Out'}_Matrix.xlsx`);
+            logMessage("Excel file generated and downloaded successfully.", "success");
+        }
+
+        // Initial launch hook
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeReferralInDefaults();
+            initSystem();
+        });
     </script>
 </body>
 </html>
