@@ -156,6 +156,7 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .selected-row { background-color: #e0e7ff !important; }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans pb-16 antialiased">
@@ -329,7 +330,7 @@
             <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50/50">
                 <div>
                     <h2 class="text-lg font-bold text-slate-900" id="tableHeadingTitle">Master Referral and Pricing View</h2>
-                    <p class="text-xs text-slate-400">Review structural rates matrices. Real-time updates active.</p>
+                    <p class="text-xs text-slate-400">Review structural rates matrices. Real-time updates active. Click any row to highlight.</p>
                 </div>
                 <div class="flex flex-wrap gap-2 w-full md:w-auto items-center justify-end">
                     <div id="categoryFilterWrapper" class="w-full sm:w-48 hidden">
@@ -344,7 +345,10 @@
                         📥 Excel
                     </button>
                     <button onclick="openExportModal('word')" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3.5 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
-                        📄 Word Report
+                        📄 Word
+                    </button>
+                    <button onclick="openExportModal('pdf')" class="bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-3.5 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 shrink-0">
+                        🖨️ PDF
                     </button>
                 </div>
             </div>
@@ -523,19 +527,16 @@
 
         window.deleteCategory = function(catName) {
             if (confirm(`🚨 Are you sure you want to delete category "${catName}"? All tests in this category will be reassigned to "General Chemistry".`)) {
-                // Ensure General Chemistry exists as fallback
                 if (!window.inCategoryList.includes('General Chemistry')) {
                     window.inCategoryList.push('General Chemistry');
                 }
 
-                // Reassign all tests belonging to this category to General Chemistry
                 Object.keys(window.inCategories).forEach(testKey => {
                     if (window.inCategories[testKey] === catName) {
                         window.inCategories[testKey] = 'General Chemistry';
                     }
                 });
 
-                // Remove category from list
                 window.inCategoryList = window.inCategoryList.filter(c => c !== catName);
                 window.syncCloudStorage();
                 renderCategoryManagerList();
@@ -572,6 +573,12 @@
         window.toggleCategoryCollapse = function(catKey) {
             window.collapsedCategories[catKey] = !window.collapsedCategories[catKey];
             renderTable();
+        }
+
+        // Row Selection / Highlighting Handler
+        window.selectTableRow = function(trElement) {
+            document.querySelectorAll('#tableBody tr').forEach(row => row.classList.remove('selected-row'));
+            trElement.classList.add('selected-row');
         }
 
         function bindExcelUploadListener() {
@@ -839,7 +846,7 @@
                     if (!isCollapsed) {
                         catTests.sort().forEach(testKey => {
                             let displayName = testKey.replace(/-/g, " ");
-                            bodyHTML += `<tr class="hover:bg-slate-50/80 transition-colors">
+                            bodyHTML += `<tr onclick="selectTableRow(this)" class="hover:bg-slate-50/80 transition-colors cursor-pointer">
                                 <td class="px-3 py-2.5 font-medium text-slate-500 sticky left-0 bg-white z-10 border-b border-slate-100">${cat}</td>
                                 <td class="px-3 py-2.5 font-semibold text-slate-800 sticky left-40 bg-white z-10 border-b border-slate-100">${displayName}</td>`;
                             
@@ -849,7 +856,7 @@
                             });
 
                             bodyHTML += `<td class="px-3 py-2.5 text-center border-b border-slate-100">
-                                <button onclick="deleteTestEntry('${testKey}')" class="text-rose-500 hover:text-rose-700 text-xs font-semibold">Delete</button>
+                                <button onclick="event.stopPropagation(); deleteTestEntry('${testKey}')" class="text-rose-500 hover:text-rose-700 text-xs font-semibold">Delete</button>
                             </td></tr>`;
                         });
                     }
@@ -857,7 +864,7 @@
             } else {
                 tests.filter(t => t.toLowerCase().includes(searchStr)).sort().forEach(testKey => {
                     let displayName = testKey.replace(/-/g, " ");
-                    bodyHTML += `<tr class="hover:bg-slate-50/80 transition-colors">
+                    bodyHTML += `<tr onclick="selectTableRow(this)" class="hover:bg-slate-50/80 transition-colors cursor-pointer">
                         <td class="px-3 py-2.5 font-semibold text-slate-800 sticky left-0 bg-white z-10 border-b border-slate-100">${displayName}</td>`;
                     
                     currentEnts.forEach(ent => {
@@ -866,7 +873,7 @@
                     });
 
                     bodyHTML += `<td class="px-3 py-2.5 text-center border-b border-slate-100">
-                        <button onclick="deleteTestEntry('${testKey}')" class="text-rose-500 hover:text-rose-700 text-xs font-semibold">Delete</button>
+                        <button onclick="event.stopPropagation(); deleteTestEntry('${testKey}')" class="text-rose-500 hover:text-rose-700 text-xs font-semibold">Delete</button>
                     </td></tr>`;
                 });
             }
@@ -893,7 +900,7 @@
             const modalLabDropdown = document.getElementById('modalLabDropdown');
             const modalTitle = document.getElementById('modalTitle');
             
-            modalTitle.innerText = `Configure ${type === 'excel' ? 'Excel' : 'Word'} Export`;
+            modalTitle.innerText = `Configure ${type === 'excel' ? 'Excel' : type === 'word' ? 'Word' : 'PDF'} Export`;
             modalLabDropdown.innerHTML = '';
             
             if (currentEnts.length === 0) {
@@ -940,6 +947,9 @@
             } else if (type === 'word') {
                 if (scope === 'all') downloadWordReport();
                 else downloadSingleLabWord(selectedLab);
+            } else if (type === 'pdf') {
+                if (scope === 'all') downloadPdfReport();
+                else downloadSingleLabPdf(selectedLab);
             }
         }
 
@@ -985,18 +995,6 @@
                             size: A4;
                             margin: 1in;
                             mso-page-orientation: portrait;
-                            @mso-header {
-                                font-family: 'Calibri', Arial, sans-serif;
-                                font-size: 9pt;
-                                color: #64748b;
-                                text-align: right;
-                            }
-                            @mso-footer {
-                                font-family: 'Calibri', Arial, sans-serif;
-                                font-size: 9pt;
-                                color: #64748b;
-                                text-align: center;
-                            }
                         }
                         body { font-family: 'Calibri', Arial, sans-serif; color: #1e293b; line-height: 1.4; padding: 10px; }
                         h1 { color: #0f172a; font-size: 16px; font-weight: bold; margin-bottom: 2px; }
@@ -1097,6 +1095,118 @@
             logMessage(`Word document generated in exact template format for ${labName}.`, "success");
         }
 
+        window.downloadSingleLabPdf = function(labName) {
+            const currentDb = getCurrentDatabase();
+            const isReferralIn = window.activeTab === 'in';
+            const title = `BioSenses Referral Price List - ${labName}`;
+
+            let htmlContent = `
+                <html>
+                <head>
+                    <title>${title}</title>
+                    <style>
+                        body { font-family: 'Calibri', Arial, sans-serif; color: #1e293b; line-height: 1.4; padding: 20px; }
+                        h1 { color: #0f172a; font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+                        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
+                        th { border: 1px solid #94a3b8; padding: 6px 8px; text-align: left; font-weight: bold; background-color: #f1f5f9; }
+                        td { border: 1px solid #cbd5e1; padding: 5px 8px; }
+                        .cat-row { background-color: #f8fafc; font-weight: bold; color: #0f172a; }
+                        .col-name { width: 45%; }
+                        .col-price { width: 15%; text-align: right; }
+                        .col-sample { width: 25%; }
+                        .col-tat { width: 15%; }
+                        @media print {
+                            body { padding: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h1>${title}</h1>
+            `;
+
+            let tests = Object.keys(currentDb);
+            if (tests.length === 0) {
+                htmlContent += `<p>No records found.</p>`;
+            } else if (isReferralIn) {
+                let grouped = {};
+                tests.forEach(testKey => {
+                    let cat = window.inCategories[testKey] || "General Chemistry";
+                    if (!grouped[cat]) grouped[cat] = [];
+                    grouped[cat].push(testKey);
+                });
+
+                Object.keys(grouped).sort().forEach(cat => {
+                    let catTests = grouped[cat];
+                    if (catTests.length === 0) return;
+
+                    htmlContent += `
+                        <table>
+                            <thead>
+                                <tr class="cat-row">
+                                    <th colspan="4">${cat}</th>
+                                </tr>
+                                <tr>
+                                    <th class="col-name">Test name</th>
+                                    <th class="col-price">Price</th>
+                                    <th class="col-sample">Sample Type</th>
+                                    <th class="col-tat">TAT</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    catTests.sort().forEach(testKey => {
+                        let displayName = testKey.replace(/-/g, " ");
+                        let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
+                        htmlContent += `<tr>
+                            <td class="col-name">${displayName}</td>
+                            <td class="col-price" style="text-align: right;">${val.toFixed(2)}</td>
+                            <td class="col-sample">Serum</td>
+                            <td class="col-tat">Daily</td>
+                        </tr>`;
+                    });
+                    htmlContent += `</tbody></table>`;
+                });
+            } else {
+                htmlContent += `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="col-name">Test name</th>
+                                <th class="col-price">Price</th>
+                                <th class="col-sample">Sample Type</th>
+                                <th class="col-tat">TAT</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                tests.sort().forEach(testKey => {
+                    let displayName = testKey.replace(/-/g, " ");
+                    let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
+                    htmlContent += `<tr>
+                        <td class="col-name">${displayName}</td>
+                        <td class="col-price" style="text-align: right;">${val.toFixed(2)}</td>
+                        <td class="col-sample">Serum</td>
+                        <td class="col-tat">Daily</td>
+                    </tr>`;
+                });
+                htmlContent += `</tbody></table>`;
+            }
+
+            htmlContent += `</body></html>`;
+
+            const printWin = window.open('', '_blank');
+            printWin.document.write(htmlContent);
+            printWin.document.close();
+            printWin.focus();
+            setTimeout(() => {
+                printWin.print();
+                printWin.close();
+            }, 500);
+            logMessage(`PDF / Print layout generated for ${labName}.`, "success");
+        }
+
         window.downloadExcelTable = function() {
             const currentDb = getCurrentDatabase();
             const currentEnts = getCurrentEntities();
@@ -1140,6 +1250,10 @@
 
         window.downloadWordReport = function() {
             downloadSingleLabWord('Matrix_Report');
+        }
+
+        window.downloadPdfReport = function() {
+            downloadSingleLabPdf('Matrix_Report');
         }
 
         window.addEventListener('DOMContentLoaded', () => {
