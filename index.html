@@ -62,7 +62,7 @@
         window.inCurrentInputMode = 'select';
 
         window.pendingExportType = null; 
-        window.collapsedCategories = {}; // Track collapsed categories state
+        window.collapsedCategories = {}; 
 
         function initializeReferralInDefaults() {
             window.referralInPresetTests.forEach(testName => {
@@ -207,6 +207,29 @@
         </div>
     </div>
 
+    <!-- Category Manager Modal -->
+    <div id="categoryManagerModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-5 border border-slate-100">
+            <div>
+                <h3 class="text-base font-bold text-slate-900">Manage Categories</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Add new categories or delete existing ones. Tests in deleted categories are moved to General Chemistry.</p>
+            </div>
+
+            <div class="flex gap-2">
+                <input id="modalNewCategoryInput" type="text" placeholder="New category name..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50">
+                <button onclick="addNewCategoryFromModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shrink-0 shadow-sm">
+                    + Add Category
+                </button>
+            </div>
+
+            <div class="border border-slate-200 rounded-lg max-h-60 overflow-y-auto divide-y divide-slate-100" id="categoryListContainer"></div>
+
+            <div class="flex items-center justify-end pt-2 border-t border-slate-100">
+                <button onclick="closeCategoryManagerModal()" class="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition">Done</button>
+            </div>
+        </div>
+    </div>
+
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
         
         <div class="flex border-b border-slate-200 bg-white rounded-t-xl px-4 pt-2 gap-2 shadow-xs">
@@ -259,13 +282,9 @@
                         </button>
                     </div>
                     <div id="categoryManagerContainer" class="pt-2 hidden">
-                        <label class="block text-xs font-semibold text-slate-500 mb-1">Manage Categories</label>
-                        <div class="flex gap-2">
-                            <input id="newCategoryInput" type="text" placeholder="New category name..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
-                            <button onclick="addNewCategory()" class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-2 rounded-lg transition shrink-0 shadow-sm">
-                                + Add Category
-                            </button>
-                        </div>
+                        <button onclick="openCategoryManagerModal()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-lg border border-slate-300 transition flex items-center justify-center gap-2 shadow-xs">
+                            ⚙ Manage Categories & Deletions
+                        </button>
                     </div>
                 </div>
 
@@ -461,17 +480,66 @@
             });
         }
 
-        function addNewCategory() {
-            const input = document.getElementById('newCategoryInput');
+        function openCategoryManagerModal() {
+            renderCategoryManagerList();
+            document.getElementById('categoryManagerModal').classList.remove('hidden');
+        }
+
+        function closeCategoryManagerModal() {
+            document.getElementById('categoryManagerModal').classList.add('hidden');
+            renderCategoryDropdown();
+            renderCategoryFilterDropdown();
+            renderTable();
+        }
+
+        function renderCategoryManagerList() {
+            const container = document.getElementById('categoryListContainer');
+            if(!container) return;
+            container.innerHTML = '';
+
+            window.inCategoryList.sort().forEach(cat => {
+                let isDefault = cat === 'General Chemistry';
+                container.innerHTML += `
+                    <div class="flex items-center justify-between p-3 bg-white hover:bg-slate-50 transition-colors">
+                        <span class="text-xs font-semibold text-slate-700">${cat}</span>
+                        ${isDefault ? '<span class="text-[10px] text-slate-400 italic">Default</span>' : `<button onclick="deleteCategory('${cat}')" class="text-rose-500 hover:text-rose-700 text-xs font-semibold px-2.5 py-1 rounded border border-rose-200 bg-rose-50 transition">Delete</button>`}
+                    </div>
+                `;
+            });
+        }
+
+        function addNewCategoryFromModal() {
+            const input = document.getElementById('modalNewCategoryInput');
             let catName = input.value.trim();
             if(!catName) return;
             if(!window.inCategoryList.includes(catName)) {
                 window.inCategoryList.push(catName);
                 window.syncCloudStorage();
-                renderCategoryDropdown();
-                renderCategoryFilterDropdown();
                 input.value = '';
+                renderCategoryManagerList();
                 logMessage(`Category "${catName}" added successfully.`, "success");
+            }
+        }
+
+        window.deleteCategory = function(catName) {
+            if (confirm(`🚨 Are you sure you want to delete category "${catName}"? All tests in this category will be reassigned to "General Chemistry".`)) {
+                // Ensure General Chemistry exists as fallback
+                if (!window.inCategoryList.includes('General Chemistry')) {
+                    window.inCategoryList.push('General Chemistry');
+                }
+
+                // Reassign all tests belonging to this category to General Chemistry
+                Object.keys(window.inCategories).forEach(testKey => {
+                    if (window.inCategories[testKey] === catName) {
+                        window.inCategories[testKey] = 'General Chemistry';
+                    }
+                });
+
+                // Remove category from list
+                window.inCategoryList = window.inCategoryList.filter(c => c !== catName);
+                window.syncCloudStorage();
+                renderCategoryManagerList();
+                logMessage(`Category "${catName}" deleted. Tests reassigned to General Chemistry.`, "success");
             }
         }
 
