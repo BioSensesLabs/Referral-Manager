@@ -6,6 +6,12 @@
     <title>BioSenses Cloud Price Management System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- SheetJS Style for Excel Export with formatting -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.full.min.js"></script>
+    <!-- html2pdf for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- html-docx-js for Word Export -->
+    <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js"></script>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -1148,30 +1154,235 @@
                 drop.innerHTML = html;
             }
         }
+
         function closeExportModal() {
             const modal = document.getElementById('exportModal');
             if(modal) modal.classList.add('hidden');
         }
+
         function toggleModalLabSelector() {
             const scope = document.getElementById('exportScopeSelect').value;
             const container = document.getElementById('modalLabContainer');
             if(scope === 'single') container.classList.remove('hidden');
             else container.classList.add('hidden');
         }
+
         function executeExport() {
-            alert("Export feature executed for: " + window.pendingExportType);
+            const type = window.pendingExportType;
+            const scope = document.getElementById('exportScopeSelect').value;
+            const targetLab = document.getElementById('modalLabDropdown').value;
             closeExportModal();
+
+            if (type === 'excel') {
+                exportToExcel(scope, targetLab);
+            } else if (type === 'word') {
+                exportToWord(scope, targetLab);
+            } else if (type === 'pdf') {
+                exportToPdf(scope, targetLab);
+            }
         }
+
+        function exportToExcel(scope, targetLab) {
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            const currentEnts = getCurrentEntities();
+            const tabTitle = window.activeTab === 'out' ? "Referral_Out" : "Referral_In";
+
+            let wsData = [];
+            if (scope === 'all') {
+                if (window.activeTab === 'out') {
+                    let header = ["#", "Test Name", "Sample", "TAT", ...currentEnts];
+                    wsData.push(header);
+                    let idx = 1;
+                    Object.keys(currentDb).sort().forEach(testKey => {
+                        let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
+                        let row = [idx++, testKey, meta.sample || "Serum", meta.tat || "Daily"];
+                        currentEnts.forEach(ent => {
+                            let val = currentDb[testKey][ent];
+                            row.push(val !== undefined && val !== null ? val : "");
+                        });
+                        wsData.push(row);
+                    });
+                } else {
+                    let header = ["#", "Category", "Test Name", "Sample", "TAT", ...currentEnts];
+                    wsData.push(header);
+                    let idx = 1;
+                    window.inCategoryList.forEach(cat => {
+                        let testsInCat = Object.keys(currentDb).filter(t => (window.inCategories[t] || "General Chemistry") === cat).sort();
+                        testsInCat.forEach(testKey => {
+                            let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
+                            let row = [idx++, cat, testKey, meta.sample || "Serum", meta.tat || "Daily"];
+                            currentEnts.forEach(ent => {
+                                let val = currentDb[testKey][ent];
+                                row.push(val !== undefined && val !== null ? val : "");
+                            });
+                            wsData.push(row);
+                        });
+                    });
+                }
+            } else {
+                let header = ["#", "Test Name", "Sample", "TAT", targetLab];
+                wsData.push(header);
+                let idx = 1;
+                Object.keys(currentDb).sort().forEach(testKey => {
+                    let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
+                    let val = currentDb[testKey][targetLab];
+                    wsData.push([idx++, testKey, meta.sample || "Serum", meta.tat || "Daily", val !== undefined && val !== null ? val : ""]);
+                });
+            }
+
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, tabTitle);
+            XLSX.writeFile(wb, `BioSenses_${tabTitle}_${scope === 'all' ? 'Full_Matrix' : targetLab}.xlsx`);
+            logMessage(`Successfully exported ${tabTitle} to Excel.`, "success");
+        }
+
+        function exportToWord(scope, targetLab) {
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            const currentEnts = scope === 'all' ? getCurrentEntities() : [targetLab];
+            const tabTitle = window.activeTab === 'out' ? "Referral Out" : "Referral In";
+
+            let htmlContent = `
+                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head><meta charset='utf-8'><title>${tabTitle} Export</title>
+                <style>
+                    body { font-family: Arial, sans-serif; font-size: 11pt; color: #333; }
+                    h2 { text-align: center; color: #1e1b4b; }
+                    p { text-align: center; font-size: 9pt; color: #64748b; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9pt; text-align: left; }
+                    th { background-color: #f1f5f9; color: #1e293b; font-weight: bold; }
+                    .text-right { text-align: right; }
+                    .text-center { text-align: center; }
+                </style>
+                </head>
+                <body>
+                    <h2>BioSenses - ${tabTitle} Report</h2>
+                    <p>Generated on ${new Date().toLocaleDateString()} | Scope: ${scope === 'all' ? 'All Labs Matrix' : targetLab}</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="text-center">#</th>
+                                ${window.activeTab === 'in' && scope === 'all' ? '<th>Category</th>' : ''}
+                                <th>Test Name</th>
+                                <th>Sample</th>
+                                <th>TAT</th>
+                                ${currentEnts.map(e => `<th class="text-right">${e}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            let idx = 1;
+            Object.keys(currentDb).sort().forEach(testKey => {
+                let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
+                let cat = window.inCategories[testKey] || "General Chemistry";
+                htmlContent += `
+                    <tr>
+                        <td class="text-center">${idx++}</td>
+                        ${window.activeTab === 'in' && scope === 'all' ? `<td>${cat}</td>` : ''}
+                        <td><b>${testKey}</b></td>
+                        <td>${meta.sample || "Serum"}</td>
+                        <td>${meta.tat || "Daily"}</td>
+                        ${currentEnts.map(ent => {
+                            let val = currentDb[testKey][ent];
+                            return `<td class="text-right">${val !== undefined && val !== null ? parseFloat(val).toFixed(2) : "-"}</td>`;
+                        }).join('')}
+                    </tr>
+                `;
+            });
+
+            htmlContent += `</tbody></table></body></html>`;
+
+            let converted = htmlDocx.asBlob(htmlContent);
+            let link = document.createElement('a');
+            link.href = URL.createObjectURL(converted);
+            link.download = `BioSenses_${tabTitle.replace(/\s+/g, '_')}_${scope === 'all' ? 'Matrix' : targetLab}.docx`;
+            link.click();
+            logMessage(`Successfully exported ${tabTitle} to Word.`, "success");
+        }
+
+        function exportToPdf(scope, targetLab) {
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            const currentEnts = scope === 'all' ? getCurrentEntities() : [targetLab];
+            const tabTitle = window.activeTab === 'out' ? "Referral Out" : "Referral In";
+
+            let printContainer = document.createElement('div');
+            printContainer.style.padding = "20px";
+            printContainer.style.fontFamily = "Arial, sans-serif";
+            printContainer.style.color = "#1e293b";
+            printContainer.style.background = "#ffffff";
+
+            let html = `
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: #1e1b4b; font-size: 18px;">BioSenses Medical Laboratory</h2>
+                    <h3 style="margin: 5px 0; color: #475569; font-size: 14px;">${tabTitle} Price Report</h3>
+                    <p style="margin: 0; font-size: 10px; color: #94a3b8;">Generated: ${new Date().toLocaleDateString()} | Scope: ${scope === 'all' ? 'Full Matrix' : targetLab}</p>
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 9px;">
+                    <thead>
+                        <tr style="background-color: #f1f5f9; color: #334155; border-bottom: 2px solid #cbd5e1;">
+                            <th style="padding: 6px; text-align: center; width: 30px;">#</th>
+                            ${window.activeTab === 'in' && scope === 'all' ? '<th style="padding: 6px; text-align: left;">Category</th>' : ''}
+                            <th style="padding: 6px; text-align: left;">Test Name</th>
+                            <th style="padding: 6px; text-align: left;">Sample</th>
+                            <th style="padding: 6px; text-align: left;">TAT</th>
+                            ${currentEnts.map(e => `<th style="padding: 6px; text-align: right;">${e}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            let idx = 1;
+            Object.keys(currentDb).sort().forEach(testKey => {
+                let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
+                let cat = window.inCategories[testKey] || "General Chemistry";
+                html += `
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 5px; text-align: center; color: #64748b;">${idx++}</td>
+                        ${window.activeTab === 'in' && scope === 'all' ? `<td style="padding: 5px; color: #475569;">${cat}</td>` : ''}
+                        <td style="padding: 5px; font-weight: bold; color: #0f172a;">${testKey}</td>
+                        <td style="padding: 5px; color: #475569;">${meta.sample || "Serum"}</td>
+                        <td style="padding: 5px; color: #475569;">${meta.tat || "Daily"}</td>
+                        ${currentEnts.map(ent => {
+                            let val = currentDb[testKey][ent];
+                            return `<td style="padding: 5px; text-align: right; color: #334155;">${val !== undefined && val !== null ? parseFloat(val).toFixed(2) : "-"}</td>`;
+                        }).join('')}
+                    </tr>
+                `;
+            });
+
+            html += `</tbody></table>`;
+            printContainer.innerHTML = html;
+
+            const opt = {
+                margin:        10,
+                filename:      `BioSenses_${tabTitle.replace(/\s+/g, '_')}_${scope === 'all' ? 'Matrix' : targetLab}.pdf`,
+                image:         { type: 'jpeg', quality: 0.98 },
+                html2canvas:   { scale: 2, useCORS: true },
+                jsPDF:         { unit: 'mm', format: 'a4', orientation: currentEnts.length > 4 ? 'landscape' : 'portrait' }
+            };
+
+            html2pdf().from(printContainer).save().then(() => {
+                logMessage(`Successfully exported ${tabTitle} to PDF.`, "success");
+            });
+        }
+
         function openCategoryManagerModal() {
             const modal = document.getElementById('categoryManagerModal');
             if(modal) modal.classList.remove('hidden');
             renderCategoryListContainer();
         }
+
         function closeCategoryManagerModal() {
             const modal = document.getElementById('categoryManagerModal');
             if(modal) modal.classList.add('hidden');
             initSystem();
         }
+
         function renderCategoryListContainer() {
             const container = document.getElementById('categoryListContainer');
             if(!container) return;
@@ -1181,6 +1392,7 @@
             });
             container.innerHTML = html;
         }
+
         function addNewCategoryFromModal() {
             const input = document.getElementById('modalNewCategoryInput');
             if(!input) return;
