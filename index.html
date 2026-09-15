@@ -382,7 +382,9 @@
 
             <div class="overflow-x-auto max-h-[550px] overflow-y-auto custom-scrollbar relative">
                 <table class="min-w-full divide-y divide-slate-200 text-xs text-left table-fixed border-collapse">
-                    <thead id="tableHeader" class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wider sticky top-0 bg-white z-30 border-b border-slate-200 shadow-sm"></thead>
+                    <thead id="tableHeader" class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wider sticky top-0 bg-white z-30 border-b border-slate-200 shadow-sm">
+                        <!-- Merged Colspan Headers Injected Dynamically -->
+                    </thead>
                     <tbody id="tableBody" class="divide-y divide-slate-100 text-slate-600"></tbody>
                 </table>
             </div>
@@ -518,919 +520,487 @@
 
         function closeCategoryManagerModal() {
             document.getElementById('categoryManagerModal').classList.add('hidden');
-            renderCategoryDropdown();
-            renderCategoryFilterDropdown();
-            renderTable();
+            initSystem();
         }
 
         function renderCategoryManagerList() {
             const container = document.getElementById('categoryListContainer');
             if(!container) return;
-            container.innerHTML = '';
-
-            window.inCategoryList.sort().forEach(cat => {
-                let isDefault = cat === 'General Chemistry';
-                container.innerHTML += `
-                    <div class="flex items-center justify-between p-3 bg-white hover:bg-slate-50 transition-colors">
-                        <span class="text-xs font-semibold text-slate-700">${cat}</span>
-                        ${isDefault ? '<span class="text-[10px] text-slate-400 italic">Default</span>' : `<button onclick="deleteCategory('${cat}')" class="text-rose-500 hover:text-rose-700 text-xs font-semibold px-2.5 py-1 rounded border border-rose-200 bg-rose-50 transition">Delete</button>`}
-                    </div>
-                `;
-            });
+            container.innerHTML = window.inCategoryList.map(cat => `
+                <div class="flex items-center justify-between p-3 text-sm">
+                    <span class="font-medium text-slate-700">${cat}</span>
+                    <button onclick="deleteCategory('${cat}')" class="text-rose-600 hover:text-rose-800 text-xs font-semibold px-2 py-1 rounded border border-rose-200 bg-rose-50 transition">Delete</button>
+                </div>
+            `).join('');
         }
 
         function addNewCategoryFromModal() {
             const input = document.getElementById('modalNewCategoryInput');
-            let catName = input.value.trim();
-            if(!catName) return;
-            if(!window.inCategoryList.includes(catName)) {
-                window.inCategoryList.push(catName);
-                window.syncCloudStorage();
-                input.value = '';
-                renderCategoryManagerList();
-                logMessage(`Category "${catName}" added successfully.`, "success");
+            const val = input.value.trim();
+            if(!val) return;
+            if(window.inCategoryList.includes(val)) {
+                alert("Category already exists.");
+                return;
             }
+            window.inCategoryList.push(val);
+            input.value = "";
+            renderCategoryManagerList();
+            window.syncCloudStorage();
         }
 
-        window.deleteCategory = function(catName) {
-            if (confirm(`🚨 Are you sure you want to delete category "${catName}"? All tests in this category will be reassigned to "General Chemistry".`)) {
-                if (!window.inCategoryList.includes('General Chemistry')) {
-                    window.inCategoryList.push('General Chemistry');
-                }
-
-                Object.keys(window.inCategories).forEach(testKey => {
-                    if (window.inCategories[testKey] === catName) {
-                        window.inCategories[testKey] = 'General Chemistry';
-                    }
-                });
-
+        function deleteCategory(catName) {
+            if(window.inCategoryList.length <= 1) {
+                alert("You must keep at least one category.");
+                return;
+            }
+            if(confirm(`Delete category "${catName}"? Tests assigned here will be moved to General Chemistry.`)) {
                 window.inCategoryList = window.inCategoryList.filter(c => c !== catName);
-                window.syncCloudStorage();
-                renderCategoryManagerList();
-                logMessage(`Category "${catName}" deleted. Tests reassigned to General Chemistry.`, "success");
-            }
-        }
-
-        function renderCategoryDropdown() {
-            const dropdown = document.getElementById('categoryDropdown');
-            if(!dropdown) return;
-            dropdown.innerHTML = '';
-            window.inCategoryList.forEach(cat => {
-                const opt = document.createElement('option');
-                opt.value = cat;
-                opt.textContent = cat;
-                dropdown.appendChild(opt);
-            });
-        }
-
-        function renderCategoryFilterDropdown() {
-            const dropdown = document.getElementById('categoryFilterSelect');
-            if(!dropdown) return;
-            let currentVal = dropdown.value;
-            dropdown.innerHTML = '<option value="ALL">📁 All Categories</option>';
-            window.inCategoryList.sort().forEach(cat => {
-                const opt = document.createElement('option');
-                opt.value = cat;
-                opt.textContent = cat;
-                dropdown.appendChild(opt);
-            });
-            dropdown.value = [...dropdown.options].some(o => o.value === currentVal) ? currentVal : 'ALL';
-        }
-
-        function renderCloneDropdown() {
-            const dropdown = document.getElementById('cloneEntityDropdown');
-            if(!dropdown) return;
-            const currentEnts = getCurrentEntities();
-            dropdown.innerHTML = '<option value="">-- Blank (Zero Prices) --</option>';
-            currentEnts.forEach(ent => {
-                const opt = document.createElement('option');
-                opt.value = ent;
-                opt.textContent = `Clone from ${ent}`;
-                dropdown.appendChild(opt);
-            });
-        }
-
-        window.toggleCategoryCollapse = function(catKey) {
-            window.collapsedCategories[catKey] = !window.collapsedCategories[catKey];
-            renderTable();
-        }
-
-        // --- ROW SELECTION & EDIT POPULATION ---
-        window.selectTableRow = function(trElement, testKey) {
-            document.querySelectorAll('#tableBody tr').forEach(row => row.classList.remove('selected-row'));
-            trElement.classList.add('selected-row');
-
-            if (!testKey) return;
-
-            const currentDb = getCurrentDatabase();
-            const currentEnts = getCurrentEntities();
-            const currentMeta = getCurrentMeta();
-
-            toggleTestInputMode('select');
-
-            const dropdown = document.getElementById('testDropdown');
-            if (dropdown) {
-                dropdown.value = testKey;
-            }
-
-            if (window.activeTab === 'in' && window.inCategories[testKey]) {
-                const catDropdown = document.getElementById('categoryDropdown');
-                if (catDropdown) catDropdown.value = window.inCategories[testKey];
-            }
-
-            if (currentMeta[testKey]) {
-                document.getElementById('formSampleInput').value = currentMeta[testKey].sample || "Serum";
-                document.getElementById('formTatInput').value = currentMeta[testKey].tat || "Daily";
-            } else {
-                document.getElementById('formSampleInput').value = "Serum";
-                document.getElementById('formTatInput').value = "Daily";
-            }
-
-            currentEnts.forEach(ent => {
-                const el = document.getElementById(`form-price-${ent}`);
-                if (el) {
-                    el.value = currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0;
-                }
-            });
-
-            document.getElementById('priceForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        };
-
-        // --- LAB MANAGEMENT FUNCTIONS (ADD, EDIT, DELETE, CLONE) ---
-        function addNewEntity() {
-            const input = document.getElementById('newEntityInput');
-            const cloneDropdown = document.getElementById('cloneEntityDropdown');
-            let rawName = input.value.trim();
-            if(!rawName) return;
-
-            let name = sanitizeCloudKey(rawName);
-            const currentEnts = getCurrentEntities();
-            const currentDb = getCurrentDatabase();
-
-            if(currentEnts.includes(name)) {
-                alert("An entity with this name already exists.");
-                return;
-            }
-
-            let cloneSource = cloneDropdown ? cloneDropdown.value : "";
-
-            currentEnts.push(name);
-            Object.keys(currentDb).forEach(test => {
-                if (cloneSource && currentDb[test][cloneSource] !== undefined) {
-                    currentDb[test][name] = currentDb[test][cloneSource];
-                } else {
-                    currentDb[test][name] = 0;
-                }
-            });
-
-            input.value = '';
-            if(cloneDropdown) cloneDropdown.value = "";
-            window.syncCloudStorage();
-            logMessage(`Lab entity "${rawName}" added successfully${cloneSource ? ` (Cloned from ${cloneSource})` : ''}.`, "success");
-        }
-
-        window.editOperationalEntity = function(oldName) {
-            let newRawName = prompt(`Enter new name for lab entity "${oldName}":`, oldName);
-            if (!newRawName || !newRawName.trim()) return;
-            
-            let newName = sanitizeCloudKey(newRawName.trim());
-            const currentEnts = getCurrentEntities();
-            const currentDb = getCurrentDatabase();
-
-            if (currentEnts.includes(newName) && newName !== oldName) {
-                alert("A lab entity with this name already exists.");
-                return;
-            }
-
-            if (window.activeTab === 'out') {
-                window.entities = window.entities.map(e => e === oldName ? newName : e);
-            } else {
-                window.inEntities = window.inEntities.map(e => e === oldName ? newName : e);
-            }
-
-            Object.keys(currentDb).forEach(testKey => {
-                if (currentDb[testKey][oldName] !== undefined) {
-                    currentDb[testKey][newName] = currentDb[testKey][oldName];
-                    delete currentDb[testKey][oldName];
-                }
-            });
-
-            window.syncCloudStorage();
-            logMessage(`Lab entity renamed from "${oldName}" to "${newName}".`, "success");
-        }
-
-        window.deleteOperationalEntity = function(entityName) {
-            if (confirm(`🚨 WARNING: Delete the entity column "${entityName}"? This will drop its stored prices permanently.`)) {
-                let currentEnts = getCurrentEntities();
-                let currentDb = getCurrentDatabase();
-
-                if (window.activeTab === 'out') {
-                    window.entities = currentEnts.filter(ent => ent !== entityName);
-                } else {
-                    window.inEntities = currentEnts.filter(ent => ent !== entityName);
-                }
-
-                Object.keys(currentDb).forEach(testKey => {
-                    if (currentDb[testKey][entityName] !== undefined) {
-                        delete currentDb[testKey][entityName];
+                Object.keys(window.inCategories).forEach(k => {
+                    if(window.inCategories[k] === catName) {
+                        window.inCategories[k] = window.inCategoryList[0];
                     }
                 });
+                renderCategoryManagerList();
                 window.syncCloudStorage();
-                logMessage(`Lab entity "${entityName}" deleted successfully.`, "success");
             }
-        }
-
-        function bindExcelUploadListener() {
-            const fileInput = document.getElementById('excelFile');
-            if(!fileInput) return;
-             
-            fileInput.addEventListener('change', function(e) {
-                const file = e.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-                reader.onload = function(evt) {
-                    try {
-                        const data = evt.target.result;
-                        const workbook = XLSX.read(data, { type: 'binary' });
-                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                         
-                        if (rawRows.length <= 1) return;
-                        const currentDb = getCurrentDatabase();
-                        const currentEnts = getCurrentEntities();
-                        const currentMeta = getCurrentMeta();
-
-                        const headerRow = rawRows[0].map(h => String(h).trim().toLowerCase());
-                        const isReferralInWithCategory = window.activeTab === 'in' && headerRow.includes('category');
-
-                        for (let i = 1; i < rawRows.length; i++) {
-                            const row = rawRows[i];
-                            if (!row || row.length === 0) continue;
-
-                            let rawTestName = "";
-                            let rawCategory = "General Chemistry";
-                            let startIndex = 1;
-
-                            if (isReferralInWithCategory) {
-                                rawCategory = row[0] ? String(row[0]).trim() : "General Chemistry";
-                                rawTestName = row[1] ? String(row[1]).trim() : "";
-                                startIndex = 2;
-                                if (!window.inCategoryList.includes(rawCategory) && rawCategory) {
-                                    window.inCategoryList.push(rawCategory);
-                                }
-                            } else {
-                                rawTestName = row[0] ? String(row[0]).trim() : "";
-                                startIndex = 1;
-                            }
-
-                            if (rawTestName && rawTestName !== "undefined" && rawTestName !== "") {
-                                let testKey = sanitizeCloudKey(rawTestName);
-
-                                if (!currentDb[testKey]) {
-                                    currentDb[testKey] = {};
-                                    currentEnts.forEach(ent => currentDb[testKey][ent] = 0);
-                                }
-
-                                if (window.activeTab === 'in') {
-                                    window.inCategories[testKey] = rawCategory || "General Chemistry";
-                                }
-
-                                currentEnts.forEach((ent, index) => {
-                                    let cellVal = row[startIndex + index];
-                                    currentDb[testKey][ent] = cellVal !== undefined && !isNaN(parseFloat(cellVal)) ? parseFloat(cellVal) : 0;
-                                });
-
-                                let sampleVal = row[startIndex + currentEnts.length] || "Serum";
-                                let tatVal = row[startIndex + currentEnts.length + 1] || "Daily";
-                                currentMeta[testKey] = { sample: String(sampleVal), tat: String(tatVal) };
-                            }
-                        }
-                        window.syncCloudStorage();
-                        renderCategoryFilterDropdown();
-                        logMessage("Excel file successfully parsed and imported.", "success");
-                    } catch (parseError) {
-                        logMessage("Fail compilation spreadsheet upload parsing: " + parseError.message, "error");
-                    }
-                };
-                reader.readAsBinaryString(file);
-            });
         }
 
         function renderDropdown() {
-            const dropdown = document.getElementById('testDropdown');
-            if(!dropdown) return;
-            dropdown.innerHTML = '<option value="">-- Choose a test --</option>';
+            const drop = document.getElementById('testDropdown');
+            if(!drop) return;
             const currentDb = getCurrentDatabase();
+            const tests = Object.keys(currentDb).sort();
+            drop.innerHTML = `<option value="">-- Choose a test --</option>` + tests.map(t => `<option value="${t}">${t}</option>`).join('');
+        }
 
-            Object.keys(currentDb).sort().forEach(test => {
-                const opt = document.createElement('option'); opt.value = test; opt.textContent = test.replace(/-/g, " ");
-                dropdown.appendChild(opt);
-            });
+        function renderCloneDropdown() {
+            const drop = document.getElementById('cloneEntityDropdown');
+            if(!drop) return;
+            const ents = getCurrentEntities();
+            drop.innerHTML = `<option value="">-- Blank (Zero Prices) --</option>` + ents.map(e => `<option value="${e}">${e}</option>`).join('');
+        }
+
+        function renderCategoryDropdown() {
+            const drop = document.getElementById('categoryDropdown');
+            if(!drop) return;
+            drop.innerHTML = window.inCategoryList.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+
+        function renderCategoryFilterDropdown() {
+            const drop = document.getElementById('categoryFilterSelect');
+            if(!drop) return;
+            drop.innerHTML = `<option value="ALL">📁 All Categories</option>` + window.inCategoryList.map(c => `<option value="${c}">${c}</option>`).join('');
         }
 
         function renderFormFields() {
             const container = document.getElementById('dynamicFormPrices');
             if(!container) return;
-            container.innerHTML = '';
-            const currentEnts = getCurrentEntities();
+            const ents = getCurrentEntities();
+            container.innerHTML = ents.map(e => `
+                <div class="bg-slate-50 border border-slate-200 rounded-lg p-2">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase truncate">${e}</label>
+                    <input type="number" step="0.01" id="form_price_${e}" placeholder="0.00" class="w-full mt-1 border border-slate-300 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-white">
+                </div>
+            `).join('');
+        }
 
-            if (currentEnts.length === 0) {
-                container.innerHTML = `<span class="text-xs text-slate-400 italic col-span-full">No entities created yet. Add a lab entity to manage prices.</span>`;
+        function addNewEntity() {
+            const input = document.getElementById('newEntityInput');
+            const cloneDropdown = document.getElementById('cloneEntityDropdown');
+            const name = input.value.trim();
+            const cloneSource = cloneDropdown.value;
+
+            if(!name) {
+                alert("Please enter a valid lab name.");
+                return;
+            }
+            const ents = getCurrentEntities();
+            if(ents.includes(name)) {
+                alert("Lab entity already exists.");
                 return;
             }
 
-            currentEnts.forEach(ent => {
-                container.innerHTML += `
-                    <div>
-                        <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-tight mb-0.5">${ent}</label>
-                        <input type="number" step="0.01" id="form-price-${ent}" value="0" class="w-full border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-mono bg-white">
-                    </div>`;
-            });
-        }
-
-        document.body.addEventListener('change', function(e) {
-            if(e.target && e.target.id === 'testDropdown') {
-                const testName = e.target.value;
-                const mode = getCurrentInputMode();
-                const currentDb = getCurrentDatabase();
-                const currentEnts = getCurrentEntities();
-                const currentMeta = getCurrentMeta();
-
-                if(!testName || mode !== 'select') return;
-                currentEnts.forEach(ent => {
-                    const el = document.getElementById(`form-price-${ent}`);
-                    if(el) el.value = currentDb[testName][ent] || 0;
-                });
-                if (window.activeTab === 'in' && window.inCategories[testName]) {
-                    const catDropdown = document.getElementById('categoryDropdown');
-                    if(catDropdown) catDropdown.value = window.inCategories[testName];
-                }
-
-                if (currentMeta[testName]) {
-                    document.getElementById('formSampleInput').value = currentMeta[testName].sample || "Serum";
-                    document.getElementById('formTatInput').value = currentMeta[testName].tat || "Daily";
+            ents.push(name);
+            const currentDb = getCurrentDatabase();
+            Object.keys(currentDb).forEach(testKey => {
+                if(cloneSource && currentDb[testKey][cloneSource] !== undefined) {
+                    currentDb[testKey][name] = currentDb[testKey][cloneSource];
                 } else {
-                    document.getElementById('formSampleInput').value = "Serum";
-                    document.getElementById('formTatInput').value = "Daily";
+                    currentDb[testKey][name] = 0;
                 }
-            }
-        });
+            });
+
+            input.value = "";
+            cloneDropdown.value = "";
+            window.syncCloudStorage();
+            logMessage(`Added new entity: ${name}`, "success");
+        }
 
         function saveFormPrice(e) {
             e.preventDefault();
             const mode = getCurrentInputMode();
-            let rawTestName = mode === 'create' 
-                ? document.getElementById('testTextInput').value.trim() 
-                : document.getElementById('testDropdown').value;
+            let testName = "";
 
-            if(!rawTestName) return;
-            let testName = sanitizeCloudKey(rawTestName);
+            if(mode === 'select') {
+                testName = document.getElementById('testDropdown').value;
+            } else {
+                testName = document.getElementById('testTextInput').value.trim();
+            }
+
+            if(!testName) return;
+            const key = sanitizeCloudKey(testName);
             const currentDb = getCurrentDatabase();
-            const currentEnts = getCurrentEntities();
             const currentMeta = getCurrentMeta();
 
-            if (!currentDb[testName]) {
-                currentDb[testName] = {};
-                currentEnts.forEach(ent => currentDb[testName][ent] = 0);
+            if(!currentDb[key]) {
+                currentDb[key] = {};
             }
 
-            if (window.activeTab === 'in') {
-                const catDropdown = document.getElementById('categoryDropdown');
-                if(catDropdown) {
-                    window.inCategories[testName] = catDropdown.value;
-                }
-            }
-
-            let sampleVal = document.getElementById('formSampleInput').value.trim() || "Serum";
-            let tatVal = document.getElementById('formTatInput').value.trim() || "Daily";
-            currentMeta[testName] = { sample: sampleVal, tat: tatVal };
-
-            currentEnts.forEach(ent => {
-                const el = document.getElementById(`form-price-${ent}`);
-                currentDb[testName][ent] = el ? (parseFloat(el.value) || 0) : 0;
+            const ents = getCurrentEntities();
+            ents.forEach(ent => {
+                const val = parseFloat(document.getElementById(`form_price_${ent}`)?.value) || 0;
+                currentDb[key][ent] = val;
             });
+
+            const sample = document.getElementById('formSampleInput').value || "Serum";
+            const tat = document.getElementById('formTatInput').value || "Daily";
+            currentMeta[key] = { sample, tat };
+
+            if(window.activeTab === 'in') {
+                const catSel = document.getElementById('categoryDropdown').value;
+                window.inCategories[key] = catSel || "General Chemistry";
+            }
 
             window.syncCloudStorage();
-            const textInput = document.getElementById('testTextInput');
-            if(textInput) textInput.value = "";
+            logMessage(`Test record successfully saved: ${testName}`, "success");
             document.getElementById('priceForm').reset();
-            document.getElementById('formSampleInput').value = "Serum";
-            document.getElementById('formTatInput').value = "Daily";
-            currentEnts.forEach(ent => {
-                const el = document.getElementById(`form-price-${ent}`);
-                if(el) el.value = 0;
+            if(mode === 'create') toggleTestInputMode('select');
+        }
+
+        function populateFormForEditing(testName) {
+            const key = sanitizeCloudKey(testName);
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            const testData = currentDb[key];
+            if(!testData) return;
+
+            toggleTestInputMode('select');
+            const drop = document.getElementById('testDropdown');
+            drop.value = testName;
+
+            const ents = getCurrentEntities();
+            ents.forEach(ent => {
+                const inputField = document.getElementById(`form_price_${ent}`);
+                if(inputField) {
+                    inputField.value = testData[ent] !== undefined ? testData[ent] : "";
+                }
             });
-            logMessage(`Record for "${rawTestName}" updated successfully.`, "success");
+
+            const meta = currentMeta[key] || { sample: "Serum", tat: "Daily" };
+            document.getElementById('formSampleInput').value = meta.sample;
+            document.getElementById('formTatInput').value = meta.tat;
+
+            if(window.activeTab === 'in') {
+                const catDrop = document.getElementById('categoryDropdown');
+                if(catDrop) catDrop.value = window.inCategories[key] || "General Chemistry";
+            }
+
+            window.currentEditingRow = testName;
+            renderTable();
+            logMessage(`Loaded test record for editing: ${testName}`, "success");
         }
 
         function renderTable() {
-            const header = document.getElementById('tableHeader');
+            const head = document.getElementById('tableHeader');
             const body = document.getElementById('tableBody');
-            if(!header || !body) return;
-             
-            const searchStr = document.getElementById('searchInput').value.toLowerCase();
-            const selectedCategoryFilter = window.activeTab === 'in' ? document.getElementById('categoryFilterSelect').value : 'ALL';
+            if(!head || !body) return;
+
+            const ents = getCurrentEntities();
             const currentDb = getCurrentDatabase();
-            const currentEnts = getCurrentEntities();
             const currentMeta = getCurrentMeta();
+            const searchVal = document.getElementById('searchInput').value.toLowerCase();
+            const catFilter = document.getElementById('categoryFilterSelect')?.value || "ALL";
 
-            let headerHTML = `<tr>`;
-            if (window.activeTab === 'in') {
-                headerHTML += `<th class="px-3 py-3 w-36 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Category</th>`;
-                headerHTML += `<th class="px-3 py-3 w-48 text-slate-700 font-bold bg-slate-50 sticky left-36 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Test Name</th>`;
-            } else {
-                headerHTML += `<th class="px-3 py-3 w-64 text-slate-700 font-bold bg-slate-50 sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-b">Test Name</th>`;
+            // --- RENDER MERGED HEADERS USING COLSPAN ---
+            let topHeaderHTML = `<tr>
+                <th rowspan="2" class="px-4 py-3 border-b border-r border-slate-200 bg-slate-100 text-slate-700 w-64">Test Name</th>
+                <th rowspan="2" class="px-3 py-3 border-b border-r border-slate-200 bg-slate-100 text-slate-700 w-28">Sample</th>
+                <th rowspan="2" class="px-3 py-3 border-b border-r border-slate-200 bg-slate-100 text-slate-700 w-24">TAT</th>`;
+            
+            if(window.activeTab === 'in') {
+                topHeaderHTML += `<th rowspan="2" class="px-3 py-3 border-b border-r border-slate-200 bg-slate-100 text-slate-700 w-36">Category</th>`;
             }
 
-            headerHTML += `<th class="px-3 py-3 text-slate-700 font-bold border-b text-center w-28">Sample</th>`;
-            headerHTML += `<th class="px-3 py-3 text-slate-700 font-bold border-b text-center w-24">TAT</th>`;
-
-            currentEnts.forEach(ent => {
-                headerHTML += `<th class="px-3 py-3 text-slate-700 font-bold border-b text-right">
-                    <div class="flex items-center justify-end gap-1">
-                        <span>${ent}</span>
-                        <button onclick="editOperationalEntity('${ent}')" class="text-indigo-600 hover:text-indigo-800 font-normal text-[10px]" title="Edit Lab Name">✎</button>
-                        <button onclick="deleteOperationalEntity('${ent}')" class="text-rose-500 hover:text-rose-700 font-normal" title="Delete Lab">×</button>
-                    </div>
-                </th>`;
+            // Entity header block spanning across its respective columns
+            ents.forEach(ent => {
+                topHeaderHTML += `<th colspan="2" class="px-3 py-2 border-b border-r border-slate-200 text-center bg-indigo-50 text-indigo-900 font-bold">${ent}</th>`;
             });
-            headerHTML += `<th class="px-3 py-3 text-slate-700 font-bold border-b text-center w-20">Action</th></tr>`;
-            header.innerHTML = headerHTML;
+            topHeaderHTML += `</tr>`;
 
-            let bodyHTML = "";
-            let tests = Object.keys(currentDb);
+            // Sub-header columns (Price & Status/Action pair per entity)
+            let subHeaderHTML = `<tr>`;
+            ents.forEach(() => {
+                subHeaderHTML += `
+                    <th class="px-2 py-2 border-b border-r border-slate-200 text-center bg-slate-50 text-slate-600">Price</th>
+                    <th class="px-2 py-2 border-b border-r border-slate-200 text-center bg-slate-50 text-slate-600">Action</th>`;
+            });
+            subHeaderHTML += `</tr>`;
 
-            if (tests.length === 0) {
-                let colSpan = currentEnts.length + (window.activeTab === 'in' ? 5 : 4);
-                body.innerHTML = `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-slate-400 italic">No tests found in database.</td></tr>`;
+            head.innerHTML = topHeaderHTML + subHeaderHTML;
+
+            // --- RENDER TABLE ROWS ---
+            let rowsHTML = "";
+            let tests = Object.keys(currentDb).sort();
+
+            if(window.activeTab === 'in' && catFilter !== "ALL") {
+                tests = tests.filter(t => (window.inCategories[sanitizeCloudKey(t)] || "General Chemistry") === catFilter);
+            }
+
+            if(searchVal) {
+                tests = tests.filter(t => t.toLowerCase().includes(searchVal));
+            }
+
+            if(tests.length === 0) {
+                const totalCols = 3 + (window.activeTab === 'in' ? 1 : 0) + (ents.length * 2);
+                body.innerHTML = `<tr><td colspan="${totalCols}" class="text-center py-8 text-slate-400 font-medium">No matching test records found.</td></tr>`;
                 return;
             }
 
-            if (window.activeTab === 'in') {
-                let grouped = {};
-                tests.forEach(testKey => {
-                    let cat = window.inCategories[testKey] || "General Chemistry";
-                    if (selectedCategoryFilter !== 'ALL' && cat !== selectedCategoryFilter) return;
-                    if (!grouped[cat]) grouped[cat] = [];
-                    grouped[cat].push(testKey);
-                });
+            tests.forEach(testName => {
+                const key = sanitizeCloudKey(testName);
+                const testData = currentDb[key] || {};
+                const meta = currentMeta[key] || { sample: "Serum", tat: "Daily" };
+                const catName = window.inCategories[key] || "General Chemistry";
+                const isSelected = window.currentEditingRow === testName;
+                const rowClass = isSelected ? "selected-row hover:bg-indigo-50/50 cursor-pointer transition-colors" : "hover:bg-slate-50/80 cursor-pointer transition-colors";
 
-                let categoryKeys = Object.keys(grouped).sort();
-                if (categoryKeys.length === 0) {
-                    let colSpan = currentEnts.length + 5;
-                    body.innerHTML = `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-slate-400 italic">No matching tests found for this category filter.</td></tr>`;
-                    return;
+                rowsHTML += `<tr onclick="populateFormForEditing('${testName}')" class="${rowClass}">`;
+                rowsHTML += `<td class="px-4 py-3 font-semibold text-slate-800 border-r border-slate-100 truncate">${testName}</td>`;
+                rowsHTML += `<td class="px-3 py-3 text-slate-500 border-r border-slate-100 truncate">${meta.sample}</td>`;
+                rowsHTML += `<td class="px-3 py-3 text-slate-500 border-r border-slate-100 truncate">${meta.tat}</td>`;
+
+                if(window.activeTab === 'in') {
+                    rowsHTML += `<td class="px-3 py-3 text-slate-500 border-r border-slate-100 truncate"><span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold">${catName}</span></td>`;
                 }
 
-                categoryKeys.forEach(cat => {
-                    let catTests = grouped[cat].filter(t => t.toLowerCase().includes(searchStr) || cat.toLowerCase().includes(searchStr));
-                    if (catTests.length === 0 && searchStr !== "") return;
-
-                    let isCollapsed = !!window.collapsedCategories[cat];
-                    let toggleIcon = isCollapsed ? '▶' : '▼';
-
-                    bodyHTML += `<tr class="bg-indigo-50/80 font-bold text-indigo-900 cursor-pointer hover:bg-indigo-100/80 transition-colors" onclick="toggleCategoryCollapse('${cat}')">
-                        <td colspan="${currentEnts.length + 4}" class="px-3 py-2 uppercase text-[11px] tracking-wider border-y border-indigo-100 flex items-center justify-between">
-                            <span>${toggleIcon} ${cat} (${catTests.length} tests)</span>
-                        </td>
-                    </tr>`;
-
-                    if (!isCollapsed) {
-                        catTests.sort().forEach(testKey => {
-                            let displayName = testKey.replace(/-/g, " ");
-                            let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                            bodyHTML += `<tr onclick="selectTableRow(this, '${testKey}')" class="hover:bg-indigo-50/40 transition-colors cursor-pointer group">
-                                <td class="px-3 py-2.5 font-medium text-slate-500 sticky left-0 bg-white group-hover:bg-indigo-50/40 z-10 border-b border-slate-100">${cat}</td>
-                                <td class="px-3 py-2.5 font-semibold text-slate-800 sticky left-36 bg-white group-hover:bg-indigo-50/40 z-10 border-b border-slate-100">${displayName}</td>
-                                <td class="px-3 py-2.5 text-center text-slate-500 border-b border-slate-100">${meta.sample}</td>
-                                <td class="px-3 py-2.5 text-center text-slate-500 border-b border-slate-100">${meta.tat}</td>`;
-                            
-                            currentEnts.forEach(ent => {
-                                let val = currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0;
-                                bodyHTML += `<td class="px-3 py-2.5 text-right font-mono text-slate-600 border-b border-slate-100">${val.toFixed(2)}</td>`;
-                            });
-
-                            bodyHTML += `<td class="px-3 py-2.5 text-center border-b border-slate-100">
-                                <button onclick="event.stopPropagation(); deleteTestEntry('${testKey}')" class="text-rose-500 hover:text-rose-700 text-xs font-semibold">Delete</button>
-                            </td></tr>`;
-                        });
-                    }
+                ents.forEach(ent => {
+                    const priceVal = testData[ent] !== undefined ? testData[ent] : 0;
+                    rowsHTML += `<td class="px-2 py-3 text-right font-mono font-medium text-slate-700 border-r border-slate-100">${Number(priceVal).toFixed(2)}</td>`;
+                    rowsHTML += `<td class="px-2 py-3 text-center border-r border-slate-100"><button onclick="event.stopPropagation(); deleteTestRecord('${testName}')" class="text-rose-400 hover:text-rose-600 p-1 rounded transition" title="Delete Test">✕</button></td>`;
                 });
-            } else {
-                tests.filter(t => t.toLowerCase().includes(searchStr)).sort().forEach(testKey => {
-                    let displayName = testKey.replace(/-/g, " ");
-                    let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                    bodyHTML += `<tr onclick="selectTableRow(this, '${testKey}')" class="hover:bg-indigo-50/40 transition-colors cursor-pointer group">
-                        <td class="px-3 py-2.5 font-semibold text-slate-800 sticky left-0 bg-white group-hover:bg-indigo-50/40 z-10 border-b border-slate-100">${displayName}</td>
-                        <td class="px-3 py-2.5 text-center text-slate-500 border-b border-slate-100">${meta.sample}</td>
-                        <td class="px-3 py-2.5 text-center text-slate-500 border-b border-slate-100">${meta.tat}</td>`;
-                    
-                    currentEnts.forEach(ent => {
-                        let val = currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0;
-                        bodyHTML += `<td class="px-3 py-2.5 text-right font-mono text-slate-600 border-b border-slate-100">${val.toFixed(2)}</td>`;
-                    });
 
-                    bodyHTML += `<td class="px-3 py-2.5 text-center border-b border-slate-100">
-                        <button onclick="event.stopPropagation(); deleteTestEntry('${testKey}')" class="text-rose-500 hover:text-rose-700 text-xs font-semibold">Delete</button>
-                    </td></tr>`;
-                });
-            }
+                rowsHTML += `</tr>`;
+            });
 
-            body.innerHTML = bodyHTML;
+            body.innerHTML = rowsHTML;
         }
 
-        window.deleteTestEntry = function(testKey) {
-            if(confirm(`Are you sure you want to delete test "${testKey.replace(/-/g, " ")}"?`)) {
-                let currentDb = getCurrentDatabase();
-                let currentMeta = getCurrentMeta();
-                if(currentDb[testKey]) {
-                    delete currentDb[testKey];
-                    if(currentMeta[testKey]) delete currentMeta[testKey];
-                    if(window.activeTab === 'in' && window.inCategories[testKey]) {
-                        delete window.inCategories[testKey];
-                    }
-                    window.syncCloudStorage();
+        function deleteTestRecord(testName) {
+            if(confirm(`Are you sure you want to delete test "${testName}"?`)) {
+                const key = sanitizeCloudKey(testName);
+                const currentDb = getCurrentDatabase();
+                const currentMeta = getCurrentMeta();
+                delete currentDb[key];
+                delete currentMeta[key];
+                if(window.activeTab === 'in') {
+                    delete window.inCategories[key];
                 }
+                if(window.currentEditingRow === testName) window.currentEditingRow = null;
+                window.syncCloudStorage();
+                logMessage(`Deleted test record: ${testName}`, "success");
             }
         }
 
-        window.openExportModal = function(type) {
+        function openExportModal(type) {
             window.pendingExportType = type;
-            const currentEnts = getCurrentEntities();
-            const modalLabDropdown = document.getElementById('modalLabDropdown');
-            const modalTitle = document.getElementById('modalTitle');
-            
-            modalTitle.innerText = `Configure ${type === 'excel' ? 'Excel' : type === 'word' ? 'Word' : 'PDF'} Export`;
-            modalLabDropdown.innerHTML = '';
-            
-            if (currentEnts.length === 0) {
-                alert("No lab entities available for selection.");
-                return;
-            }
+            const modal = document.getElementById('exportModal');
+            const drop = document.getElementById('modalLabDropdown');
+            const ents = getCurrentEntities();
 
-            currentEnts.forEach(ent => {
-                const opt = document.createElement('option');
-                opt.value = ent;
-                opt.textContent = ent;
-                modalLabDropdown.appendChild(opt);
-            });
-
-            document.getElementById('exportScopeSelect').value = 'all';
-            toggleModalLabSelector();
-            document.getElementById('exportModal').classList.remove('hidden');
+            drop.innerHTML = ents.map(e => `<option value="${e}">${e}</option>`).join('');
+            document.getElementById('exportScopeSelect').value = "all";
+            document.getElementById('modalLabContainer').classList.add('hidden');
+            modal.classList.remove('hidden');
         }
 
-        window.closeExportModal = function() {
+        function closeExportModal() {
             document.getElementById('exportModal').classList.add('hidden');
             window.pendingExportType = null;
         }
 
-        window.toggleModalLabSelector = function() {
+        function toggleModalLabSelector() {
             const scope = document.getElementById('exportScopeSelect').value;
             const container = document.getElementById('modalLabContainer');
-            if (scope === 'single') {
+            if(scope === 'single') {
                 container.classList.remove('hidden');
             } else {
                 container.classList.add('hidden');
             }
         }
 
-        window.executeExport = function() {
+        function executeExport() {
             const type = window.pendingExportType;
             const scope = document.getElementById('exportScopeSelect').value;
-            const selectedLab = document.getElementById('modalLabDropdown').value;
+            const labName = document.getElementById('modalLabDropdown').value;
             closeExportModal();
 
-            if (type === 'excel') {
-                if (scope === 'all') downloadExcelTable();
-                else downloadSingleLabExcel(selectedLab);
-            } else if (type === 'word') {
-                if (scope === 'all') downloadWordReport();
-                else downloadSingleLabWord(selectedLab);
-            } else if (type === 'pdf') {
-                if (scope === 'all') downloadPdfReport();
-                else downloadSingleLabPdf(selectedLab);
+            if(type === 'excel') {
+                exportExcelFile(scope, labName);
+            } else if(type === 'word') {
+                exportWordDocument(scope, labName);
+            } else if(type === 'pdf') {
+                exportPdfDocument(scope, labName);
             }
         }
 
-        window.downloadSingleLabExcel = function(labName) {
+        function exportExcelFile(scope, labName) {
             const currentDb = getCurrentDatabase();
             const currentMeta = getCurrentMeta();
-            let exportData = [];
+            const ents = getCurrentEntities();
+            let dataRows = [];
 
-            if (window.activeTab === 'in') {
-                exportData.push(["Category", "Test Name", `${labName} Price`, "Sample Type", "TAT"]);
-                Object.keys(currentDb).sort().forEach(testKey => {
-                    let cat = window.inCategories[testKey] || "General Chemistry";
-                    let displayName = testKey.replace(/-/g, " ");
-                    let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
-                    let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                    exportData.push([cat, displayName, val, meta.sample, meta.tat]);
-                });
-            } else {
-                exportData.push(["Test Name", `${labName} Price`, "Sample Type", "TAT"]);
-                Object.keys(currentDb).sort().forEach(testKey => {
-                    let displayName = testKey.replace(/-/g, " ");
-                    let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
-                    let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                    exportData.push([displayName, val, meta.sample, meta.tat]);
-                });
-            }
+            if(scope === 'all') {
+                let headerRow = ["Test Name", "Sample", "TAT"];
+                if(window.activeTab === 'in') headerRow.push("Category");
+                ents.forEach(e => headerRow.push(e));
+                dataRows.push(headerRow);
 
-            const worksheet = XLSX.utils.aoa_to_sheet(exportData);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, `${labName}_Prices`);
-            XLSX.writeFile(workbook, `BioSenses_${labName}_${window.activeTab === 'in' ? 'Referral_In' : 'Referral_Out'}_PriceList.xlsx`);
-            logMessage(`Excel sheet generated specifically for ${labName}.`, "success");
-        }
-
-        window.downloadSingleLabWord = function(labName) {
-            const currentDb = getCurrentDatabase();
-            const currentMeta = getCurrentMeta();
-            const isReferralIn = window.activeTab === 'in';
-            const title = `BioSenses Referral Price List - ${labName}`;
-
-            let htmlContent = `
-                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-                <head>
-                    <title>${title}</title>
-                    <style>
-                        @page { size: A4; margin: 1in; mso-page-orientation: portrait; }
-                        body { font-family: 'Calibri', Arial, sans-serif; color: #1e293b; line-height: 1.4; padding: 10px; }
-                        h1 { color: #0f172a; font-size: 16px; font-weight: bold; margin-bottom: 2px; }
-                        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10.5px; }
-                        th { border: 1px solid #94a3b8; padding: 5px 8px; text-align: left; font-weight: bold; background-color: #f1f5f9; }
-                        td { border: 1px solid #cbd5e1; padding: 4px 8px; }
-                        .cat-row { background-color: #f8fafc; font-weight: bold; color: #0f172a; }
-                        .col-name { width: 45%; }
-                        .col-price { width: 15%; text-align: right; }
-                        .col-sample { width: 25%; }
-                        .col-tat { width: 15%; }
-                    </style>
-                </head>
-                <body>
-                    <h1>${title}</h1>
-            `;
-
-            let tests = Object.keys(currentDb);
-            if (tests.length === 0) {
-                htmlContent += `<p>No records found.</p>`;
-            } else if (isReferralIn) {
-                let grouped = {};
-                tests.forEach(testKey => {
-                    let cat = window.inCategories[testKey] || "General Chemistry";
-                    if (!grouped[cat]) grouped[cat] = [];
-                    grouped[cat].push(testKey);
-                });
-
-                Object.keys(grouped).sort().forEach(cat => {
-                    let catTests = grouped[cat];
-                    if (catTests.length === 0) return;
-
-                    htmlContent += `
-                        <table>
-                            <thead>
-                                <tr class="cat-row">
-                                    <th colspan="4">${cat}</th>
-                                </tr>
-                                <tr>
-                                    <th class="col-name">Test name</th>
-                                    <th class="col-price">Price</th>
-                                    <th class="col-sample">Sample Type</th>
-                                    <th class="col-tat">TAT</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                    `;
-
-                    catTests.sort().forEach(testKey => {
-                        let displayName = testKey.replace(/-/g, " ");
-                        let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
-                        let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                        htmlContent += `<tr>
-                            <td class="col-name">${displayName}</td>
-                            <td class="col-price" style="text-align: right;">${val.toFixed(2)}</td>
-                            <td class="col-sample">${meta.sample}</td>
-                            <td class="col-tat">${meta.tat}</td>
-                        </tr>`;
+                Object.keys(currentDb).sort().forEach(key => {
+                    const testName = key.replace(/-/g, "."); // approximate reverse sanitization for display
+                    const meta = currentMeta[key] || { sample: "Serum", tat: "Daily" };
+                    let row = [testName, meta.sample, meta.tat];
+                    if(window.activeTab === 'in') row.push(window.inCategories[key] || "General Chemistry");
+                    ents.forEach(e => {
+                        row.push(currentDb[key][e] !== undefined ? currentDb[key][e] : 0);
                     });
-                    htmlContent += `</tbody></table>`;
+                    dataRows.push(row);
                 });
             } else {
-                htmlContent += `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th class="col-name">Test name</th>
-                                <th class="col-price">Price</th>
-                                <th class="col-sample">Sample Type</th>
-                                <th class="col-tat">TAT</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                `;
-
-                tests.sort().forEach(testKey => {
-                    let displayName = testKey.replace(/-/g, " ");
-                    let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
-                    let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                    htmlContent += `<tr>
-                        <td class="col-name">${displayName}</td>
-                        <td class="col-price" style="text-align: right;">${val.toFixed(2)}</td>
-                        <td class="col-sample">${meta.sample}</td>
-                        <td class="col-tat">${meta.tat}</td>
-                    </tr>`;
+                dataRows.push(["Test Name", "Sample", "TAT", `${labName} Price`]);
+                Object.keys(currentDb).sort().forEach(key => {
+                    const testName = key.replace(/-/g, ".");
+                    const meta = currentMeta[key] || { sample: "Serum", tat: "Daily" };
+                    let price = currentDb[key][labName] !== undefined ? currentDb[key][labName] : 0;
+                    dataRows.push([testName, meta.sample, meta.tat, price]);
                 });
-                htmlContent += `</tbody></table>`;
             }
 
-            htmlContent += `</body></html>`;
+            const worksheet = XLSX.utils.aoa_to_sheet(dataRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Pricing Matrix");
+            XLSX.writeFile(workbook, `BioSenses_${window.activeTab}_Matrix.xlsx`);
+            logMessage("Excel document exported successfully.", "success");
+        }
 
+        function exportWordDocument(scope, labName) {
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            const ents = getCurrentEntities();
+            let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+            <head><title>BioSenses Report</title><style>body{font-family:Arial;} table{border-collapse:collapse;width:100%;} th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:left;} th{background-color:#f1f5f9;}</style></head>
+            <body><h2>BioSenses Price Management Report (${window.activeTab.toUpperCase()})</h2><table><thead><tr><th>Test Name</th><th>Sample</th><th>TAT</th>`;
+            
+            if(scope === 'all') {
+                ents.forEach(e => htmlContent += `<th>${e}</th>`);
+            } else {
+                htmlContent += `<th>${labName} Price</th>`;
+            }
+            htmlContent += `</tr></thead><tbody>`;
+
+            Object.keys(currentDb).sort().forEach(key => {
+                const testName = key.replace(/-/g, ".");
+                const meta = currentMeta[key] || { sample: "Serum", tat: "Daily" };
+                htmlContent += `<tr><td>${testName}</td><td>${meta.sample}</td><td>${meta.tat}</td>`;
+                if(scope === 'all') {
+                    ents.forEach(e => {
+                        let p = currentDb[key][e] !== undefined ? currentDb[key][e] : 0;
+                        htmlContent += `<td>${p}</td>`;
+                    });
+                } else {
+                    let p = currentDb[key][labName] !== undefined ? currentDb[key][labName] : 0;
+                    htmlContent += `<td>${p}</td>`;
+                }
+                htmlContent += `</tr>`;
+            });
+
+            htmlContent += `</tbody></table></body></html>`;
             const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `BioSenses_Referral_Price_List_${labName}.docx`;
+            a.download = `BioSenses_${window.activeTab}_Report.doc`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            logMessage(`Word document generated in exact template format for ${labName}.`, "success");
+            logMessage("Word document exported successfully.", "success");
         }
 
-        window.downloadSingleLabPdf = function(labName) {
-            const currentDb = getCurrentDatabase();
-            const currentMeta = getCurrentMeta();
-            const isReferralIn = window.activeTab === 'in';
-            const title = `BioSenses Referral Price List - ${labName}`;
-
-            let htmlContent = `
-                <html>
-                <head>
-                    <title>${title}</title>
-                    <style>
-                        body { font-family: 'Calibri', Arial, sans-serif; color: #1e293b; line-height: 1.4; padding: 20px; }
-                        h1 { color: #0f172a; font-size: 18px; font-weight: bold; margin-bottom: 10px; }
-                        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
-                        th { border: 1px solid #94a3b8; padding: 6px 8px; text-align: left; font-weight: bold; background-color: #f1f5f9; }
-                        td { border: 1px solid #cbd5e1; padding: 5px 8px; }
-                        .cat-row { background-color: #f8fafc; font-weight: bold; color: #0f172a; }
-                        .col-name { width: 45%; }
-                        .col-price { width: 15%; text-align: right; }
-                        .col-sample { width: 25%; }
-                        .col-tat { width: 15%; }
-                        @media print { body { padding: 0; } }
-                    </style>
-                </head>
-                <body>
-                    <h1>${title}</h1>
-            `;
-
-            let tests = Object.keys(currentDb);
-            if (tests.length === 0) {
-                htmlContent += `<p>No records found.</p>`;
-            } else if (isReferralIn) {
-                let grouped = {};
-                tests.forEach(testKey => {
-                    let cat = window.inCategories[testKey] || "General Chemistry";
-                    if (!grouped[cat]) grouped[cat] = [];
-                    grouped[cat].push(testKey);
-                });
-
-                Object.keys(grouped).sort().forEach(cat => {
-                    let catTests = grouped[cat];
-                    if (catTests.length === 0) return;
-
-                    htmlContent += `
-                        <table>
-                            <thead>
-                                <tr class="cat-row">
-                                    <th colspan="4">${cat}</th>
-                                </tr>
-                                <tr>
-                                    <th class="col-name">Test name</th>
-                                    <th class="col-price">Price</th>
-                                    <th class="col-sample">Sample Type</th>
-                                    <th class="col-tat">TAT</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                    `;
-
-                    catTests.sort().forEach(testKey => {
-                        let displayName = testKey.replace(/-/g, " ");
-                        let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
-                        let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                        htmlContent += `<tr>
-                            <td class="col-name">${displayName}</td>
-                            <td class="col-price" style="text-align: right;">${val.toFixed(2)}</td>
-                            <td class="col-sample">${meta.sample}</td>
-                            <td class="col-tat">${meta.tat}</td>
-                        </tr>`;
-                    });
-                    htmlContent += `</tbody></table>`;
-                });
-            } else {
-                htmlContent += `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th class="col-name">Test name</th>
-                                <th class="col-price">Price</th>
-                                <th class="col-sample">Sample Type</th>
-                                <th class="col-tat">TAT</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                `;
-
-                tests.sort().forEach(testKey => {
-                    let displayName = testKey.replace(/-/g, " ");
-                    let val = currentDb[testKey][labName] !== undefined ? currentDb[testKey][labName] : 0;
-                    let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                    htmlContent += `<tr>
-                        <td class="col-name">${displayName}</td>
-                        <td class="col-price" style="text-align: right;">${val.toFixed(2)}</td>
-                        <td class="col-sample">${meta.sample}</td>
-                        <td class="col-tat">${meta.tat}</td>
-                    </tr>`;
-                });
-                htmlContent += `</tbody></table>`;
-            }
-
-            htmlContent += `</body></html>`;
-
-            const printWin = window.open('', '_blank');
-            printWin.document.write(htmlContent);
-            printWin.document.close();
-            printWin.focus();
-            setTimeout(() => {
-                printWin.print();
-                printWin.close();
-            }, 500);
-            logMessage(`PDF / Print layout generated for ${labName}.`, "success");
+        function exportPdfDocument(scope, labName) {
+            window.print();
         }
 
-        window.downloadExcelTable = function() {
-            const currentDb = getCurrentDatabase();
-            const currentEnts = getCurrentEntities();
-            const currentMeta = getCurrentMeta();
-            let exportData = [];
+        function bindExcelUploadListener() {
+            const fileInput = document.getElementById('excelFile');
+            if(!fileInput) return;
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if(!file) return;
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const data = new Uint8Array(evt.target.result);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                        
+                        if(json.length < 2) {
+                            alert("Uploaded excel sheet is empty or improperly formatted.");
+                            return;
+                        }
 
-            if (window.activeTab === 'in') {
-                let headers = ["Category", "Test Name"];
-                currentEnts.forEach(ent => headers.push(ent));
-                headers.push("Sample Type", "TAT");
-                exportData.push(headers);
+                        const headers = json[0];
+                        const currentEnts = getCurrentEntities();
+                        const currentDb = getCurrentDatabase();
+                        const currentMeta = getCurrentMeta();
 
-                Object.keys(currentDb).sort().forEach(testKey => {
-                    let cat = window.inCategories[testKey] || "General Chemistry";
-                    let displayName = testKey.replace(/-/g, " ");
-                    let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                    let row = [cat, displayName];
-                    currentEnts.forEach(ent => {
-                        row.push(currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0);
-                    });
-                    row.push(meta.sample, meta.tat);
-                    exportData.push(row);
-                });
-            } else {
-                let headers = ["Test Name"];
-                currentEnts.forEach(ent => headers.push(ent));
-                headers.push("Sample Type", "TAT");
-                exportData.push(headers);
+                        for(let i = 1; i < json.length; i++) {
+                            const row = json[i];
+                            if(!row || row.length === 0) continue;
+                            const testName = String(row[0] || "").trim();
+                            if(!testName) continue;
 
-                Object.keys(currentDb).sort().forEach(testKey => {
-                    let displayName = testKey.replace(/-/g, " ");
-                    let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                    let row = [displayName];
-                    currentEnts.forEach(ent => {
-                        row.push(currentDb[testKey][ent] !== undefined ? currentDb[testKey][ent] : 0);
-                    });
-                    row.push(meta.sample, meta.tat);
-                    exportData.push(row);
-                });
-            }
+                            const key = sanitizeCloudKey(testName);
+                            if(!currentDb[key]) currentDb[key] = {};
 
-            const worksheet = XLSX.utils.aoa_to_sheet(exportData);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, window.activeTab === 'in' ? "Referral_In_Prices" : "Referral_Out_Prices");
-            XLSX.writeFile(workbook, `BioSenses_${window.activeTab === 'in' ? 'Referral_In' : 'Referral_Out'}_Matrix.xlsx`);
-            logMessage("Excel full matrix file generated and downloaded successfully.", "success");
+                            const sample = String(row[1] || "Serum");
+                            const tat = String(row[2] || "Daily");
+                            currentMeta[key] = { sample, tat };
+
+                            let colOffset = 3;
+                            if(window.activeTab === 'in') {
+                                const catName = String(row[3] || "General Chemistry");
+                                window.inCategories[key] = catName;
+                                if(!window.inCategoryList.includes(catName)) window.inCategoryList.push(catName);
+                                colOffset = 4;
+                            }
+
+                            currentEnts.forEach((ent, idx) => {
+                                const colIndex = colOffset + idx;
+                                const val = parseFloat(row[colIndex]);
+                                currentDb[key][ent] = !isNaN(val) ? val : 0;
+                            });
+                        }
+
+                        window.syncCloudStorage();
+                        logMessage("Master sheet imported and synchronized successfully.", "success");
+                    } catch(err) {
+                        logMessage("Excel parsing error: " + err.message, "error");
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
         }
-
-        window.downloadWordReport = function() {
-            downloadSingleLabWord('Matrix_Report');
-        }
-
-        window.downloadPdfReport = function() {
-            downloadSingleLabPdf('Matrix_Report');
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            initializeReferralInDefaults();
-            initSystem();
-        });
     </script>
 </body>
 </html>
