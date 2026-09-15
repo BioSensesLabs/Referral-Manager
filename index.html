@@ -289,7 +289,7 @@
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-800/60 pb-3">
                 <div>
                     <h2 class="text-sm font-bold flex items-center gap-2"><span>🧮</span> Referral Out Price Calculator</h2>
-                    <p class="text-[11px] text-indigo-200 mt-0.5">Select a target lab, add multiple tests, and check pricing sub-totals instantly.</p>
+                    <p class="text-[11px] text-indigo-200 mt-0.5">Select a target lab, search and add multiple tests, and check pricing sub-totals instantly.</p>
                 </div>
                 <div class="flex items-center gap-2 w-full sm:w-auto">
                     <label class="text-[11px] font-semibold text-indigo-200 whitespace-nowrap">Target Lab:</label>
@@ -299,15 +299,13 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-                <div class="md:col-span-5 space-y-2.5">
-                    <label class="block text-[11px] font-semibold text-indigo-200">Select & Add Tests</label>
-                    <div class="flex gap-2">
-                        <select id="calcTestDropdown" class="bg-indigo-950 border border-indigo-700 text-white text-xs rounded-lg p-2 outline-none focus:ring-2 focus:ring-indigo-400 flex-1 min-w-0">
-                            <option value="">-- Choose test --</option>
-                        </select>
-                        <button type="button" onclick="addTestToCalculator()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-sm shrink-0">
-                            + Add
-                        </button>
+                <div class="md:col-span-5 space-y-2.5 relative">
+                    <label class="block text-[11px] font-semibold text-indigo-200">Search & Add Tests</label>
+                    <div class="relative">
+                        <input id="calcSearchInput" type="text" oninput="handleCalculatorSearch()" placeholder="🔍 Type test name to search..." class="w-full bg-indigo-950 border border-indigo-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-indigo-400">
+                        <div id="calcSuggestionsContainer" class="absolute left-0 right-0 top-full mt-1 bg-indigo-950 border border-indigo-700 rounded-lg shadow-xl max-h-48 overflow-y-auto custom-scrollbar z-40 hidden divide-y divide-indigo-900">
+                            <!-- Dynamic suggestions appear here -->
+                        </div>
                     </div>
                     <div class="flex flex-wrap gap-1.5 pt-1 max-h-24 overflow-y-auto custom-scrollbar p-1 bg-indigo-950/40 rounded-lg border border-indigo-900/60" id="calcSelectedChipsContainer">
                         <!-- Selected test chips appear here -->
@@ -330,7 +328,7 @@
                             </thead>
                             <tbody id="calcResultsTableBody" class="divide-y divide-indigo-900/50 text-slate-200">
                                 <tr>
-                                    <td colspan="3" class="p-3 text-center text-indigo-400 italic">No tests selected yet. Choose tests above to calculate.</td>
+                                    <td colspan="3" class="p-3 text-center text-indigo-400 italic">No tests selected yet. Search and choose tests above to calculate.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -439,7 +437,7 @@
             </div>
 
             <div class="overflow-x-auto max-h-[550px] overflow-y-auto custom-scrollbar relative">
-                <table class="w-full divide-y divide-slate-200 text-xs text-left border-collapse" style="table-layout: auto;">
+                <table id="masterTableElement" class="w-full divide-y divide-slate-200 text-xs text-left border-collapse">
                     <thead id="tableHeader" class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wider sticky top-0 bg-white z-30 border-b border-slate-200 shadow-sm"></thead>
                     <tbody id="tableBody" class="divide-y divide-slate-100 text-slate-600"></tbody>
                 </table>
@@ -547,44 +545,70 @@
             renderCategoryFilterDropdown();
             renderFormFields();
             renderTable();
-            initCalculatorDropdowns();
+            initCalculatorComponents();
         }
 
-        // Referral Out Calculator Controller Logic
-        function initCalculatorDropdowns() {
+        // Referral Out Calculator Controller Logic with Search
+        function initCalculatorComponents() {
             const labDrop = document.getElementById('calcLabDropdown');
-            const testDrop = document.getElementById('calcTestDropdown');
-            if (!labDrop || !testDrop) return;
+            if (!labDrop) return;
 
             const currentEnts = getCurrentEntities();
-            const currentDb = getCurrentDatabase();
-
             let labHtml = '';
             currentEnts.forEach(ent => {
                 labHtml += `<option value="${ent}">${ent}</option>`;
             });
             labDrop.innerHTML = labHtml;
 
-            let testHtml = '<option value="">-- Choose test --</option>';
-            Object.keys(currentDb).sort().forEach(testKey => {
-                testHtml += `<option value="${testKey}">${testKey}</option>`;
-            });
-            testDrop.innerHTML = testHtml;
-
             renderCalculatorChips();
             runCalculator();
         }
 
-        function addTestToCalculator() {
-            const testDrop = document.getElementById('calcTestDropdown');
-            if(!testDrop) return;
-            const val = testDrop.value;
-            if(!val) return;
+        function handleCalculatorSearch() {
+            const input = document.getElementById('calcSearchInput');
+            const container = document.getElementById('calcSuggestionsContainer');
+            if(!input || !container) return;
 
-            if(!window.calcSelectedTests.includes(val)) {
-                window.calcSelectedTests.push(val);
+            const query = input.value.trim().toLowerCase();
+            const currentDb = getCurrentDatabase();
+
+            if(!query) {
+                container.classList.add('hidden');
+                container.innerHTML = "";
+                return;
             }
-            testDrop.value = "";
+
+            let matches = Object.keys(currentDb).filter(testKey => testKey.toLowerCase().includes(query)).sort();
+
+            if(matches.length === 0) {
+                container.innerHTML = `<div class="p-2.5 text-xs text-indigo-300 italic">No matching tests found</div>`;
+                container.classList.remove('hidden');
+                return;
+            }
+
+            let html = '';
+            matches.slice(0, 15).forEach(testKey => {
+                html += `<div onclick="selectTestForCalculator('${testKey.replace(/'/g, "\\'")}')" class="p-2.5 text-xs text-indigo-100 hover:bg-indigo-900 cursor-pointer transition truncate">${testKey}</div>`;
+            });
+
+            container.innerHTML = html;
+            container.classList.remove('hidden');
+        }
+
+        function selectTestForCalculator(testKey) {
+            const input = document.getElementById('calcSearchInput');
+            const container = document.getElementById('calcSuggestionsContainer');
+            
+            if(!window.calcSelectedTests.includes(testKey)) {
+                window.calcSelectedTests.push(testKey);
+            }
+
+            if(input) input.value = "";
+            if(container) {
+                container.classList.add('hidden');
+                container.innerHTML = "";
+            }
+
             renderCalculatorChips();
             runCalculator();
         }
@@ -609,7 +633,7 @@
                 html += `
                     <span class="inline-flex items-center gap-1 bg-indigo-800 text-indigo-100 text-[11px] px-2 py-1 rounded-lg border border-indigo-700">
                         ${test}
-                        <button type="button" onclick="removeTestFromCalculator('${test}')" class="text-indigo-300 hover:text-white font-bold ml-1">×</button>
+                        <button type="button" onclick="removeTestFromCalculator('${test.replace(/'/g, "\\'")}')" class="text-indigo-300 hover:text-white font-bold ml-1">×</button>
                     </span>
                 `;
             });
@@ -626,7 +650,7 @@
             const currentDb = getCurrentDatabase();
 
             if(window.calcSelectedTests.length === 0 || !selectedLab) {
-                tbody.innerHTML = `<tr><td colspan="3" class="p-3 text-center text-indigo-400 italic">No tests selected yet. Choose tests above to calculate.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="3" class="p-3 text-center text-indigo-400 italic">No tests selected yet. Search and choose tests above to calculate.</td></tr>`;
                 totalBadge.innerText = "Total: 0.00";
                 return;
             }
@@ -747,7 +771,8 @@
         function renderTable() {
             const headerEl = document.getElementById('tableHeader');
             const bodyEl = document.getElementById('tableBody');
-            if(!headerEl || !bodyEl) return;
+            const masterTableEl = document.getElementById('masterTableElement');
+            if(!headerEl || !bodyEl || !masterTableEl) return;
 
             const currentEnts = getCurrentEntities();
             const currentDb = getCurrentDatabase();
@@ -755,77 +780,153 @@
             const searchQuery = (document.getElementById('searchInput')?.value || "").toLowerCase();
             const selectedCategoryFilter = document.getElementById('categoryFilterSelect')?.value || "ALL";
 
-            let headerHtml = `<tr class="bg-slate-50">
-                <th class="p-3 w-12 text-center whitespace-nowrap">#</th>
-                <th class="p-3 whitespace-nowrap">Test Name</th>`;
-            
-            if (window.activeTab === 'in') {
-                headerHtml += `<th class="p-3 whitespace-nowrap">Category</th>`;
-            }
-
-            headerHtml += `
-                <th class="p-3 whitespace-nowrap">Sample</th>
-                <th class="p-3 whitespace-nowrap">TAT</th>`;
-
-            currentEnts.forEach(ent => {
-                headerHtml += `<th class="p-3 text-right whitespace-nowrap">${ent}</th>`;
-            });
-            headerHtml += `<th class="p-3 text-center whitespace-nowrap">Action</th></tr>`;
-            headerEl.innerHTML = headerHtml;
-
-            let testKeys = Object.keys(currentDb).sort();
-            let rowIdx = 1;
-            let bodyHtml = "";
-
-            testKeys.forEach(testKey => {
-                if(searchQuery && !testKey.toLowerCase().includes(searchQuery)) return;
-
-                let category = "General Chemistry";
-                if (window.activeTab === 'in') {
-                    category = window.inCategories[testKey] || "General Chemistry";
-                    if (selectedCategoryFilter !== "ALL" && category !== selectedCategoryFilter) return;
-                }
-
-                let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
-                let sample = meta.sample || "Serum";
-                let tat = meta.tat || "Daily";
-                let labPrices = currentDb[testKey] || {};
-
-                let isRowSelected = window.currentEditingRow === testKey;
-                let rowClass = isRowSelected ? "selected-row hover:bg-indigo-50/60 cursor-pointer transition" : "hover:bg-slate-50 cursor-pointer transition";
-
-                bodyHtml += `<tr class="${rowClass}" onclick="loadRowIntoForm('${testKey}')">
-                    <td class="p-3 text-center text-slate-400 font-mono whitespace-nowrap">${rowIdx++}</td>
-                    <td class="p-3 font-semibold text-slate-800 whitespace-nowrap" title="${testKey}">${testKey}</td>`;
-
-                if (window.activeTab === 'in') {
-                    bodyHtml += `<td class="p-3 text-slate-500 whitespace-nowrap">${category}</td>`;
-                }
-
-                bodyHtml += `
-                    <td class="p-3 text-slate-500 whitespace-nowrap">${sample}</td>
-                    <td class="p-3 text-slate-500 whitespace-nowrap">${tat}</td>`;
-
+            if (window.activeTab === 'out') {
+                // Apply strict width table layout specifically for Referral Out tab
+                masterTableEl.style.tableLayout = "fixed";
+                
+                let headerHtml = `<tr class="bg-slate-50">
+                    <th class="p-2.5 w-12 text-center whitespace-nowrap">#</th>
+                    <th class="p-2.5 w-[280px] max-w-[280px] whitespace-nowrap">Test Name</th>
+                    <th class="p-2.5 w-28 whitespace-nowrap">Sample</th>
+                    <th class="p-2.5 w-24 whitespace-nowrap">TAT</th>`;
                 currentEnts.forEach(ent => {
-                    let val = labPrices[ent];
-                    let displayVal = (val !== undefined && val !== null && val !== "") ? parseFloat(val).toFixed(2) : "-";
-                    let valClass = displayVal === "-" ? "text-slate-300 text-right p-3 whitespace-nowrap" : "text-slate-700 font-medium text-right p-3 whitespace-nowrap";
-                    bodyHtml += `<td class="${valClass}">${displayVal}</td>`;
+                    headerHtml += `<th class="p-2.5 text-right whitespace-nowrap">${ent}</th>`;
+                });
+                headerHtml += `<th class="p-2.5 w-20 text-center whitespace-nowrap">Action</th></tr>`;
+                headerEl.innerHTML = headerHtml;
+
+                let testKeys = Object.keys(currentDb).sort();
+                let rowIdx = 1;
+                let bodyHtml = "";
+
+                testKeys.forEach(testKey => {
+                    if(searchQuery && !testKey.toLowerCase().includes(searchQuery)) return;
+
+                    let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
+                    let sample = meta.sample || "Serum";
+                    let tat = meta.tat || "Daily";
+                    let labPrices = currentDb[testKey] || {};
+
+                    let isRowSelected = window.currentEditingRow === testKey;
+                    let rowClass = isRowSelected ? "selected-row hover:bg-indigo-50/60 cursor-pointer transition" : "hover:bg-slate-50 cursor-pointer transition";
+
+                    bodyHtml += `<tr class="${rowClass}" onclick="loadRowIntoForm('${testKey.replace(/'/g, "\\'")}')">
+                        <td class="p-2.5 text-center text-slate-400 font-mono whitespace-nowrap">${rowIdx++}</td>
+                        <td class="p-2.5 font-semibold text-slate-800 truncate w-[280px] max-w-[280px]" title="${testKey}">${testKey}</td>
+                        <td class="p-2.5 text-slate-500 truncate w-28" title="${sample}">${sample}</td>
+                        <td class="p-2.5 text-slate-500 truncate w-24" title="${tat}">${tat}</td>`;
+
+                    currentEnts.forEach(ent => {
+                        let val = labPrices[ent];
+                        let displayVal = (val !== undefined && val !== null && val !== "") ? parseFloat(val).toFixed(2) : "-";
+                        let valClass = displayVal === "-" ? "text-slate-300 text-right p-2.5 whitespace-nowrap" : "text-slate-700 font-medium text-right p-2.5 whitespace-nowrap";
+                        bodyHtml += `<td class="${valClass}">${displayVal}</td>`;
+                    });
+
+                    bodyHtml += `
+                        <td class="p-2.5 text-center whitespace-nowrap" onclick="event.stopPropagation()">
+                            <button type="button" onclick="deleteTestRecord('${testKey.replace(/'/g, "\\'")}')" class="text-rose-500 hover:text-rose-700 font-semibold text-xs px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 transition">Delete</button>
+                        </td>
+                    </tr>`;
                 });
 
-                bodyHtml += `
-                    <td class="p-3 text-center whitespace-nowrap" onclick="event.stopPropagation()">
-                        <button type="button" onclick="deleteTestRecord('${testKey}')" class="text-rose-500 hover:text-rose-700 font-semibold text-xs px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 transition">Delete</button>
-                    </td>
-                </tr>`;
-            });
+                if(bodyHtml === "") {
+                    let colSpan = currentEnts.length + 4;
+                    bodyHtml = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-400 italic">No matching test records found.</td></tr>`;
+                }
+                bodyEl.innerHTML = bodyHtml;
 
-            if(bodyHtml === "") {
-                let colSpan = currentEnts.length + (window.activeTab === 'in' ? 6 : 5);
-                bodyHtml = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-400 italic">No matching test records found.</td></tr>`;
+            } else {
+                // Referral In Tab restored entirely to its original category-grouped format without width restrictions
+                masterTableEl.style.tableLayout = "auto";
+
+                let headerHtml = `<tr class="bg-slate-50">
+                    <th class="p-3 text-center w-12">#</th>
+                    <th class="p-3">Test Name</th>
+                    <th class="p-3">Sample</th>
+                    <th class="p-3">TAT</th>`;
+                currentEnts.forEach(ent => {
+                    headerHtml += `<th class="p-3 text-right">${ent}</th>`;
+                });
+                headerHtml += `<th class="p-3 text-center">Action</th></tr>`;
+                headerEl.innerHTML = headerHtml;
+
+                let categoriesToRender = window.inCategoryList;
+                if (selectedCategoryFilter !== "ALL") {
+                    categoriesToRender = [selectedCategoryFilter];
+                }
+
+                let bodyHtml = "";
+                let globalRowIdx = 1;
+
+                categoriesToRender.forEach(catName => {
+                    let testsInCat = Object.keys(currentDb).filter(testKey => {
+                        let c = window.inCategories[testKey] || "General Chemistry";
+                        return c === catName;
+                    }).sort();
+
+                    if (testsInCat.length === 0 && selectedCategoryFilter === "ALL") return;
+
+                    let isCollapsed = window.collapsedCategories[catName];
+                    let chevronSymbol = isCollapsed ? "▶" : "▼";
+
+                    bodyHtml += `
+                        <tr class="bg-slate-100 font-bold text-slate-700 cursor-pointer select-none border-t-2 border-slate-200" onclick="toggleCategoryCollapse('${catName}')">
+                            <td colspan="${currentEnts.length + 5}" class="p-3 text-xs flex items-center justify-between">
+                                <span class="flex items-center gap-2">
+                                    <span>${chevronSymbol}</span>
+                                    <span class="text-indigo-900 uppercase tracking-wide font-extrabold">📁 ${catName}</span>
+                                    <span class="text-[10px] font-normal text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">(${testsInCat.length} tests)</span>
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+
+                    if (!isCollapsed) {
+                        testsInCat.forEach(testKey => {
+                            if(searchQuery && !testKey.toLowerCase().includes(searchQuery)) return;
+
+                            let meta = currentMeta[testKey] || { sample: "Serum", tat: "Daily" };
+                            let sample = meta.sample || "Serum";
+                            let tat = meta.tat || "Daily";
+                            let labPrices = currentDb[testKey] || {};
+
+                            let isRowSelected = window.currentEditingRow === testKey;
+                            let rowClass = isRowSelected ? "selected-row hover:bg-indigo-50/60 cursor-pointer transition" : "hover:bg-slate-50 cursor-pointer transition";
+
+                            bodyHtml += `<tr class="${rowClass}" onclick="loadRowIntoForm('${testKey.replace(/'/g, "\\'")}')">
+                                <td class="p-3 text-center text-slate-400 font-mono">${globalRowIdx++}</td>
+                                <td class="p-3 font-semibold text-slate-800">${testKey}</td>
+                                <td class="p-3 text-slate-500">${sample}</td>
+                                <td class="p-3 text-slate-500">${tat}</td>`;
+
+                            currentEnts.forEach(ent => {
+                                let val = labPrices[ent];
+                                let displayVal = (val !== undefined && val !== null && val !== "") ? parseFloat(val).toFixed(2) : "-";
+                                let valClass = displayVal === "-" ? "text-slate-300 text-right p-3" : "text-slate-700 font-medium text-right p-3";
+                                bodyHtml += `<td class="${valClass}">${displayVal}</td>`;
+                            });
+
+                            bodyHtml += `
+                                <td class="p-3 text-center" onclick="event.stopPropagation()">
+                                    <button type="button" onclick="deleteTestRecord('${testKey.replace(/'/g, "\\'")}')" class="text-rose-500 hover:text-rose-700 font-semibold text-xs px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 transition">Delete</button>
+                                </td>
+                            </tr>`;
+                        });
+                    }
+                });
+
+                if(bodyHtml === "") {
+                    let colSpan = currentEnts.length + 5;
+                    bodyHtml = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-400 italic">No matching test records found.</td></tr>`;
+                }
+                bodyEl.innerHTML = bodyHtml;
             }
+        }
 
-            bodyEl.innerHTML = bodyHtml;
+        function toggleCategoryCollapse(catName) {
+            window.collapsedCategories[catName] = !window.collapsedCategories[catName];
+            renderTable();
         }
 
         function loadRowIntoForm(testKey) {
