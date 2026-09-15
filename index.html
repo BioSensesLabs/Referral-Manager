@@ -990,12 +990,7 @@
                     let isCollapsed = !!window.collapsedCategories[cat];
                     let toggleIcon = isCollapsed ? '▶' : '▼';
 
-                    bodyHTML += `<tr class="bg-indigo-50/80 font-bold text-indigo-900 cursor-pointer hover:bg-indigo-100/80 transition-colors" onclick="toggleCategoryCollapse('${cat}')">
-                        <td colspan="${currentEnts.length + 4}" class="px-3 py-2 uppercase text-[11px] tracking-wider border-y border-indigo-100 flex items-center justify-between">
-                            <span>${toggleIcon} ${cat} (${catTests.length} tests)</span>
-                            <span class="text-[10px] text-indigo-600 font-normal italic">Click to ${isCollapsed ? 'expand' : 'collapse'}</span>
-                        </td>
-                    </tr>`;
+                    
 
                     if (!isCollapsed) {
                         catTests.sort().forEach(testKey => {
