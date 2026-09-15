@@ -452,7 +452,6 @@
             });
             labDropdown.innerHTML = options;
             
-            // Re-render selected tests list and total if lab or tests change
             updateCalcResults();
         }
 
@@ -573,7 +572,6 @@
             }
         }
 
-        // Close calculator dropdown when clicking outside
         document.addEventListener('click', function(e) {
             const searchInput = document.getElementById('calcSearchInput');
             const resultsBox = document.getElementById('calcDropdownResults');
@@ -1057,7 +1055,6 @@
                         let headers = json[0];
                         let currentEnts = [];
                         
-                        // Detect lab columns (starting from index 2 or 3 depending on structure)
                         for(let i = 2; i < headers.length; i++) {
                             if(headers[i]) currentEnts.push(String(headers[i]).trim());
                         }
@@ -1123,7 +1120,7 @@
             });
         }
 
-        // --- Export Functions ---
+        // --- Original Export Functions (Untouched) ---
         function openExportModal(type) {
             window.pendingExportType = type;
             const drop = document.getElementById('modalLabDropdown');
@@ -1233,7 +1230,6 @@
             window.print();
         }
 
-        // Initialize system on window load
         window.onload = function() {
             initSystem();
         };
