@@ -289,10 +289,16 @@
                         <p class="text-xs text-slate-400">Initialize baseline matrix spreadsheets or add operational lab entities.</p>
                     </div>
                     <div id="uploadSection" class="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5"></div>
-                    <div class="flex gap-2">
-                        <input id="newEntityInput" type="text" placeholder="Add a new lab..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
-                        <button onclick="addNewEntity()" class="bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shrink-0 shadow-sm">
-                            + Add New Lab
+                    <div class="space-y-2">
+                        <input id="newEntityInput" type="text" placeholder="Add a new lab name..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Clone Data From Existing Lab (Optional)</label>
+                            <select id="cloneEntityDropdown" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50">
+                                <option value="">-- Blank (Zero Prices) --</option>
+                            </select>
+                        </div>
+                        <button onclick="addNewEntity()" class="w-full bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition shadow-sm">
+                            + Add New Lab Entity
                         </button>
                     </div>
                     <div id="categoryManagerContainer" class="pt-2 hidden">
@@ -475,6 +481,7 @@
             document.getElementById('statEntities').innerText = currentEnts.length.toLocaleString();
 
             renderDropdown();
+            renderCloneDropdown();
             renderCategoryDropdown();
             renderCategoryFilterDropdown();
             renderFormFields();
@@ -590,6 +597,19 @@
             dropdown.value = [...dropdown.options].some(o => o.value === currentVal) ? currentVal : 'ALL';
         }
 
+        function renderCloneDropdown() {
+            const dropdown = document.getElementById('cloneEntityDropdown');
+            if(!dropdown) return;
+            const currentEnts = getCurrentEntities();
+            dropdown.innerHTML = '<option value="">-- Blank (Zero Prices) --</option>';
+            currentEnts.forEach(ent => {
+                const opt = document.createElement('option');
+                opt.value = ent;
+                opt.textContent = `Clone from ${ent}`;
+                dropdown.appendChild(opt);
+            });
+        }
+
         window.toggleCategoryCollapse = function(catKey) {
             window.collapsedCategories[catKey] = !window.collapsedCategories[catKey];
             renderTable();
@@ -636,9 +656,10 @@
             document.getElementById('priceForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         };
 
-        // --- LAB MANAGEMENT FUNCTIONS (ADD, EDIT, DELETE) ---
+        // --- LAB MANAGEMENT FUNCTIONS (ADD, EDIT, DELETE, CLONE) ---
         function addNewEntity() {
             const input = document.getElementById('newEntityInput');
+            const cloneDropdown = document.getElementById('cloneEntityDropdown');
             let rawName = input.value.trim();
             if(!rawName) return;
 
@@ -651,11 +672,21 @@
                 return;
             }
 
+            let cloneSource = cloneDropdown ? cloneDropdown.value : "";
+
             currentEnts.push(name);
-            Object.keys(currentDb).forEach(test => { currentDb[test][name] = 0; });
+            Object.keys(currentDb).forEach(test => {
+                if (cloneSource && currentDb[test][cloneSource] !== undefined) {
+                    currentDb[test][name] = currentDb[test][cloneSource];
+                } else {
+                    currentDb[test][name] = 0;
+                }
+            });
+
             input.value = '';
+            if(cloneDropdown) cloneDropdown.value = "";
             window.syncCloudStorage();
-            logMessage(`Lab entity "${rawName}" added successfully.`, "success");
+            logMessage(`Lab entity "${rawName}" added successfully${cloneSource ? ` (Cloned from ${cloneSource})` : ''}.`, "success");
         }
 
         window.editOperationalEntity = function(oldName) {
@@ -671,14 +702,12 @@
                 return;
             }
 
-            // Rename in entities array
             if (window.activeTab === 'out') {
                 window.entities = window.entities.map(e => e === oldName ? newName : e);
             } else {
                 window.inEntities = window.inEntities.map(e => e === oldName ? newName : e);
             }
 
-            // Migrate price keys in all tests
             Object.keys(currentDb).forEach(testKey => {
                 if (currentDb[testKey][oldName] !== undefined) {
                     currentDb[testKey][newName] = currentDb[testKey][oldName];
