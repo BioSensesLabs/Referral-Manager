@@ -606,7 +606,6 @@
             const currentEnts = getCurrentEntities();
             const currentMeta = getCurrentMeta();
 
-            // Switch form to Select mode to edit the chosen test
             toggleTestInputMode('select');
 
             const dropdown = document.getElementById('testDropdown');
@@ -634,9 +633,83 @@
                 }
             });
 
-            // Smooth scroll up to the form for editing convenience
             document.getElementById('priceForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         };
+
+        // --- LAB MANAGEMENT FUNCTIONS (ADD, EDIT, DELETE) ---
+        function addNewEntity() {
+            const input = document.getElementById('newEntityInput');
+            let rawName = input.value.trim();
+            if(!rawName) return;
+
+            let name = sanitizeCloudKey(rawName);
+            const currentEnts = getCurrentEntities();
+            const currentDb = getCurrentDatabase();
+
+            if(currentEnts.includes(name)) {
+                alert("An entity with this name already exists.");
+                return;
+            }
+
+            currentEnts.push(name);
+            Object.keys(currentDb).forEach(test => { currentDb[test][name] = 0; });
+            input.value = '';
+            window.syncCloudStorage();
+            logMessage(`Lab entity "${rawName}" added successfully.`, "success");
+        }
+
+        window.editOperationalEntity = function(oldName) {
+            let newRawName = prompt(`Enter new name for lab entity "${oldName}":`, oldName);
+            if (!newRawName || !newRawName.trim()) return;
+            
+            let newName = sanitizeCloudKey(newRawName.trim());
+            const currentEnts = getCurrentEntities();
+            const currentDb = getCurrentDatabase();
+
+            if (currentEnts.includes(newName) && newName !== oldName) {
+                alert("A lab entity with this name already exists.");
+                return;
+            }
+
+            // Rename in entities array
+            if (window.activeTab === 'out') {
+                window.entities = window.entities.map(e => e === oldName ? newName : e);
+            } else {
+                window.inEntities = window.inEntities.map(e => e === oldName ? newName : e);
+            }
+
+            // Migrate price keys in all tests
+            Object.keys(currentDb).forEach(testKey => {
+                if (currentDb[testKey][oldName] !== undefined) {
+                    currentDb[testKey][newName] = currentDb[testKey][oldName];
+                    delete currentDb[testKey][oldName];
+                }
+            });
+
+            window.syncCloudStorage();
+            logMessage(`Lab entity renamed from "${oldName}" to "${newName}".`, "success");
+        }
+
+        window.deleteOperationalEntity = function(entityName) {
+            if (confirm(`🚨 WARNING: Delete the entity column "${entityName}"? This will drop its stored prices permanently.`)) {
+                let currentEnts = getCurrentEntities();
+                let currentDb = getCurrentDatabase();
+
+                if (window.activeTab === 'out') {
+                    window.entities = currentEnts.filter(ent => ent !== entityName);
+                } else {
+                    window.inEntities = currentEnts.filter(ent => ent !== entityName);
+                }
+
+                Object.keys(currentDb).forEach(testKey => {
+                    if (currentDb[testKey][entityName] !== undefined) {
+                        delete currentDb[testKey][entityName];
+                    }
+                });
+                window.syncCloudStorage();
+                logMessage(`Lab entity "${entityName}" deleted successfully.`, "success");
+            }
+        }
 
         function bindExcelUploadListener() {
             const fileInput = document.getElementById('excelFile');
@@ -713,43 +786,6 @@
                 };
                 reader.readAsBinaryString(file);
             });
-        }
-
-        function addNewEntity() {
-            const input = document.getElementById('newEntityInput');
-            let rawName = input.value.trim();
-            if(!rawName) return;
-
-            let name = sanitizeCloudKey(rawName);
-            const currentEnts = getCurrentEntities();
-            const currentDb = getCurrentDatabase();
-
-            if(currentEnts.includes(name)) return;
-
-            currentEnts.push(name);
-            Object.keys(currentDb).forEach(test => { currentDb[test][name] = 0; });
-            input.value = '';
-            window.syncCloudStorage();
-        }
-
-        window.deleteOperationalEntity = function(entityName) {
-            if (confirm(`🚨 WARNING: Delete the entity column "${entityName}"? This will drop its stored prices permanently.`)) {
-                let currentEnts = getCurrentEntities();
-                let currentDb = getCurrentDatabase();
-
-                if (window.activeTab === 'out') {
-                    window.entities = currentEnts.filter(ent => ent !== entityName);
-                } else {
-                    window.inEntities = currentEnts.filter(ent => ent !== entityName);
-                }
-
-                Object.keys(currentDb).forEach(testKey => {
-                    if (currentDb[testKey][entityName] !== undefined) {
-                        delete currentDb[testKey][entityName];
-                    }
-                });
-                window.syncCloudStorage();
-            }
         }
 
         function renderDropdown() {
@@ -882,7 +918,13 @@
             headerHTML += `<th class="px-3 py-3 text-slate-700 font-bold border-b text-center w-24">TAT</th>`;
 
             currentEnts.forEach(ent => {
-                headerHTML += `<th class="px-3 py-3 text-slate-700 font-bold border-b text-right">${ent} <button onclick="deleteOperationalEntity('${ent}')" class="text-rose-500 hover:text-rose-700 ml-1 font-normal">×</button></th>`;
+                headerHTML += `<th class="px-3 py-3 text-slate-700 font-bold border-b text-right">
+                    <div class="flex items-center justify-end gap-1">
+                        <span>${ent}</span>
+                        <button onclick="editOperationalEntity('${ent}')" class="text-indigo-600 hover:text-indigo-800 font-normal text-[10px]" title="Edit Lab Name">✎</button>
+                        <button onclick="deleteOperationalEntity('${ent}')" class="text-rose-500 hover:text-rose-700 font-normal" title="Delete Lab">×</button>
+                    </div>
+                </th>`;
             });
             headerHTML += `<th class="px-3 py-3 text-slate-700 font-bold border-b text-center w-20">Action</th></tr>`;
             header.innerHTML = headerHTML;
