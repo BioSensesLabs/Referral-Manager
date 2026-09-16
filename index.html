@@ -66,11 +66,6 @@
         window.pendingExportType = null; 
         window.collapsedCategories = {}; 
 
-        function sanitizeCloudKey(key) {
-            if (!key) return '';
-            return String(key).trim().replace(/[.#$\[\]\/]/g, '-');
-        }
-
         function initializeReferralInDefaults() {
             window.referralInPresetTests.forEach(testName => {
                 let key = sanitizeCloudKey(testName);
@@ -286,7 +281,7 @@
             </div>
         </div>
 
-        <!-- Referral Out Calculator Section -->
+                <!-- Referral Out Calculator Section -->
         <div id="referralOutCalculatorSection" class="bg-white border border-blue-200 p-5 rounded-xl shadow-sm mb-6">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div>
@@ -524,25 +519,19 @@
         }
 
         function updateCalcResults() {
-            const labDropdown = document.getElementById('calcLabDropdown');
-            const selectedLab = labDropdown ? labDropdown.value : '';
-            const listContainer = document.getElementById('calcSelectedList');
-            const itemCountSpan = document.getElementById('calcItemCount');
-            const grandTotalDiv = document.getElementById('calcGrandTotal');
+            const selectedLab = document.getElementById('calcLabDropdown')?.value || '';
+            const container = document.getElementById('calcSelectedList');
+            const countBadge = document.getElementById('calcItemCount');
+            const grandTotalEl = document.getElementById('calcGrandTotal');
+            const currentDb = window.testDatabase || {};
 
-            if(!listContainer) return;
+            if(!container) return;
 
-            itemCountSpan.textContent = `${window.calcSelectedTests.length} tests selected`;
+            countBadge.innerText = `${window.calcSelectedTests.length} tests selected`;
 
             if(window.calcSelectedTests.length === 0) {
-                listContainer.innerHTML = `<div class="p-4 text-center text-xs text-slate-400">No tests selected yet. Choose a lab and search/add tests above.</div>`;
-                grandTotalDiv.textContent = "0.00";
-                return;
-            }
-
-            if(!selectedLab) {
-                listContainer.innerHTML = `<div class="p-4 text-center text-xs text-amber-600 font-medium">Please select a target lab above to view pricing.</div>`;
-                grandTotalDiv.textContent = "0.00";
+                container.innerHTML = `<div class="p-4 text-center text-xs text-slate-400">No tests selected yet. Choose a lab and search/add tests above.</div>`;
+                if(grandTotalEl) grandTotalEl.innerText = "0.00";
                 return;
             }
 
@@ -550,723 +539,917 @@
             let grandTotal = 0;
 
             window.calcSelectedTests.forEach(sanitizedKey => {
-                let actualName = sanitizedKey.replace(/-/g, '.');
-                let testPrices = (window.testDatabase || {})[sanitizedKey] || {};
-                let price = parseFloat(testPrices[selectedLab]) || 0;
+                let displayName = sanitizedKey.replace(/-/g, '.');
+                let testData = currentDb[sanitizedKey] || {};
+                let price = 0;
+
+                if(selectedLab && testData[selectedLab] !== undefined && testData[selectedLab] !== "") {
+                    let parsed = parseFloat(testData[selectedLab]);
+                    if(!isNaN(parsed)) price = parsed;
+                }
+
                 grandTotal += price;
 
                 html += `
-                    <div class="p-3 flex items-center justify-between bg-white hover:bg-slate-50 transition">
-                        <div>
-                            <span class="font-bold text-slate-800 text-xs">${actualName}</span>
-                            <span class="text-[10px] text-slate-400 ml-2">(${selectedLab})</span>
+                    <div class="p-3 flex items-center justify-between hover:bg-slate-50 transition">
+                        <div class="space-y-0.5">
+                            <span class="text-xs font-bold text-slate-800">${displayName}</span>
+                            <div class="text-[10px] text-slate-400">Lab: ${selectedLab ? selectedLab : '<span class="text-amber-600 font-semibold">No Lab Selected</span>'}</div>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <span class="font-bold text-indigo-600 text-xs">${price.toFixed(2)} JD</span>
-                            <button onclick="removeTestFromCalculator('${sanitizedKey}')" class="text-rose-500 hover:text-rose-700 text-xs font-bold px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 transition">✕</button>
+                        <div class="flex items-center gap-4">
+                            <div class="text-xs font-bold text-indigo-600">
+                                ${selectedLab ? price.toFixed(2) : '-'}
+                            </div>
+                            <button onclick="removeTestFromCalculator('${sanitizedKey}')" class="text-slate-400 hover:text-rose-600 text-xs font-bold px-1.5 py-0.5 rounded transition">✕</button>
                         </div>
                     </div>
                 `;
             });
 
-            listContainer.innerHTML = html;
-            grandTotalDiv.textContent = `${grandTotal.toFixed(2)} JD`;
-        }
-
-        // --- Core System Controller Logic ---
-        function logMessage(msg, type = "success") {
-            const logBox = document.getElementById("systemLog");
-            if (!logBox) return;
-            logBox.textContent = msg;
-            if (type === "success") {
-                logBox.className = "p-4 rounded-xl text-xs font-mono shadow-sm border border-slate-200 transition-all duration-300 bg-emerald-50 text-emerald-800 border-emerald-200";
-            } else if (type === "error") {
-                logBox.className = "p-4 rounded-xl text-xs font-mono shadow-sm border border-slate-200 transition-all duration-300 bg-rose-50 text-rose-800 border-rose-200";
-            } else {
-                logBox.className = "p-4 rounded-xl text-xs font-mono shadow-sm border border-slate-200 transition-all duration-300 bg-amber-50 text-amber-800 border-amber-200";
+            container.innerHTML = html;
+            if(grandTotalEl) {
+                grandTotalEl.innerText = selectedLab ? grandTotal.toFixed(2) : 'Select a Lab';
             }
         }
 
+        document.addEventListener('click', function(e) {
+            const searchInput = document.getElementById('calcSearchInput');
+            const resultsBox = document.getElementById('calcDropdownResults');
+            if(searchInput && resultsBox && !searchInput.contains(e.target) && !resultsBox.contains(e.target)) {
+                resultsBox.classList.add('hidden');
+            }
+        });
+
+
+        // --- Core Application Functions ---
         function switchTab(tab) {
             window.activeTab = tab;
-            const btnOut = document.getElementById("tabOutBtn");
-            const btnIn = document.getElementById("tabInBtn");
-            const calcSection = document.getElementById("referralOutCalculatorSection");
-            const catManagerContainer = document.getElementById("categoryManagerContainer");
-            const catFilterWrapper = document.getElementById("categoryFilterWrapper");
+            const tabOutBtn = document.getElementById('tabOutBtn');
+            const tabInBtn = document.getElementById('tabInBtn');
+            const headingTitle = document.getElementById('tableHeadingTitle');
+            const catManagerContainer = document.getElementById('categoryManagerContainer');
+            const catWrapper = document.getElementById('categoryWrapper');
+            const catFilterWrapper = document.getElementById('categoryFilterWrapper');
+            const calcSection = document.getElementById('referralOutCalculatorSection');
 
             if (tab === 'out') {
-                btnOut.className = "px-5 py-3 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center gap-2";
-                btnIn.className = "px-5 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all flex items-center gap-2";
-                if(calcSection) calcSection.classList.remove('hidden');
+                tabOutBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center gap-2";
+                tabInBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all flex items-center gap-2";
+                headingTitle.innerText = "Master Referral Out Pricing View";
                 if(catManagerContainer) catManagerContainer.classList.add('hidden');
+                if(catWrapper) catWrapper.classList.add('hidden');
                 if(catFilterWrapper) catFilterWrapper.classList.add('hidden');
-                document.getElementById("tableHeadingTitle").textContent = "Master Referral Out Pricing View";
+                if(calcSection) calcSection.classList.remove('hidden');
             } else {
-                btnIn.className = "px-5 py-3 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center gap-2";
-                btnOut.className = "px-5 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all flex items-center gap-2";
-                if(calcSection) calcSection.classList.add('hidden');
+                tabInBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center gap-2";
+                tabOutBtn.className = "px-5 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all flex items-center gap-2";
+                headingTitle.innerText = "Master Referral In Pricing View";
                 if(catManagerContainer) catManagerContainer.classList.remove('hidden');
+                if(catWrapper) catWrapper.classList.remove('hidden');
                 if(catFilterWrapper) catFilterWrapper.classList.remove('hidden');
-                document.getElementById("tableHeadingTitle").textContent = "Master Referral In Pricing View";
+                if(calcSection) calcSection.classList.add('hidden');
             }
             initSystem();
-            if(tab === 'out') initReferralOutCalculator();
+        }
+
+        function getCurrentEntities() {
+            return window.activeTab === 'out' ? window.entities : window.inEntities;
+        }
+
+        function getCurrentDatabase() {
+            return window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
+        }
+
+        function getCurrentMeta() {
+            return window.activeTab === 'out' ? window.testMeta : window.inTestMeta;
+        }
+
+        function getCurrentInputMode() {
+            return window.activeTab === 'out' ? window.currentInputMode : window.inCurrentInputMode;
+        }
+
+        function setCurrentInputMode(mode) {
+            if (window.activeTab === 'out') window.currentInputMode = mode;
+            else window.inCurrentInputMode = mode;
+        }
+
+        function logMessage(msg, type) {
+            const box = document.getElementById('systemLog');
+            if(!box) return;
+            box.className = "p-4 rounded-xl text-xs font-mono shadow-sm border transition-all duration-300";
+            if (type === "error") {
+                box.classList.add('bg-rose-50', 'text-rose-700', 'border-rose-200');
+            } else {
+                box.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+            }
+            box.innerText = "[" + new Date().toLocaleTimeString() + "] " + msg;
+        }
+
+        function sanitizeCloudKey(keyStr) {
+            return keyStr.replace(/[\.\#\$\/\[\]]/g, "-");
         }
 
         function initSystem() {
-            populateEntityDropdowns();
-            populateDropdowns();
+            const currentDb = getCurrentDatabase();
+            const currentEnts = getCurrentEntities();
+
+            const uploadSection = document.getElementById('uploadSection');
+            if(uploadSection) {
+                let statusInfo = Object.keys(currentDb).length > 0 
+                    ? `<span class="text-[10px] text-emerald-600 block text-center font-bold mt-1">✓ Cloud Active (${Object.keys(currentDb).length} tests initialized)</span>`
+                    : '';
+                 
+                uploadSection.className = "bg-slate-50 border border-dashed border-slate-300 rounded-lg p-2.5";
+                uploadSection.innerHTML = `
+                    <label class="block flex flex-col cursor-pointer gap-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-slate-500 font-medium">Upload Master Sheet (.xlsx):</span>
+                            <input type="file" id="excelFile" accept=".xlsx, .xls" class="text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"/>
+                        </div>
+                        ${statusInfo}
+                    </label>
+                `;
+                bindExcelUploadListener();
+            }
+
+            document.getElementById('statTests').innerText = Object.keys(currentDb).length.toLocaleString();
+            document.getElementById('statEntities').innerText = currentEnts.length.toLocaleString();
+
+            renderDropdown();
+            renderCloneDropdown();
+            renderCategoryDropdown();
+            renderCategoryFilterDropdown();
+            renderFormFields();
             renderTable();
-            updateStats();
-            if(window.activeTab === 'out') initReferralOutCalculator();
-        }
 
-        function populateEntityDropdowns() {
-            const cloneSelect = document.getElementById("cloneEntityDropdown");
-            const modalSelect = document.getElementById("modalLabDropdown");
-            const ents = window.activeTab === 'out' ? window.entities : window.inEntities;
-
-            let cloneOptions = '<option value="">-- Blank (Zero Prices) --</option>';
-            let modalOptions = '';
-            ents.forEach(e => {
-                cloneOptions += `<option value="${e}">${e}</option>`;
-                modalOptions += `<option value="${e}">${e}</option>`;
-            });
-
-            if(cloneSelect) cloneSelect.innerHTML = cloneOptions;
-            if(modalSelect) modalSelect.innerHTML = modalOptions;
-
-            const uploadSec = document.getElementById("uploadSection");
-            if(uploadSec) {
-                uploadSec.innerHTML = `
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Upload Baseline Spreadsheet (.xlsx)</label>
-                    <input type="file" id="excelFile" accept=".xlsx, .xls" class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
-                    <button onclick="handleFileUpload()" class="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 rounded-lg transition shadow-sm">
-                        Upload & Synchronize Matrix
-                    </button>
-                `;
+            if (window.activeTab === 'out') {
+                initReferralOutCalculator();
             }
-        }
-
-        function populateDropdowns() {
-            const testDropdown = document.getElementById("testDropdown");
-            const categoryDropdown = document.getElementById("categoryDropdown");
-            const categoryFilterSelect = document.getElementById("categoryFilterSelect");
-            
-            const dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-            const catRef = window.activeTab === 'out' ? {} : window.inCategories;
-            const catList = window.activeTab === 'out' ? [] : window.inCategoryList;
-
-            let testOptions = '<option value="">-- Choose a test --</option>';
-            Object.keys(dbRef).sort().forEach(tKey => {
-                let actualName = tKey.replace(/-/g, '.');
-                testOptions += `<option value="${tKey}">${actualName}</option>`;
-            });
-            if(testDropdown) testDropdown.innerHTML = testOptions;
-
-            let catOptions = '';
-            catList.forEach(c => {
-                catOptions += `<option value="${c}">${c}</option>`;
-            });
-            if(categoryDropdown) categoryDropdown.innerHTML = catOptions;
-
-            if(categoryFilterSelect) {
-                let filterOptions = '<option value="ALL">📁 All Categories</option>';
-                catList.forEach(c => {
-                    filterOptions += `<option value="${c}">${c}</option>`;
-                });
-                categoryFilterSelect.innerHTML = filterOptions;
-            }
-
-            const dynPrices = document.getElementById("dynamicFormPrices");
-            const ents = window.activeTab === 'out' ? window.entities : window.inEntities;
-            let priceHtml = '';
-            ents.forEach(e => {
-                priceHtml += `
-                    <div>
-                        <label class="block text-[10px] font-semibold text-slate-500 truncate">${e}</label>
-                        <input type="number" step="0.01" id="price_${e}" placeholder="0.00" class="w-full border border-slate-300 rounded p-1.5 text-xs bg-slate-50/50 outline-none focus:ring-1 focus:ring-indigo-500">
-                    </div>
-                `;
-            });
-            if(dynPrices) dynPrices.innerHTML = priceHtml;
         }
 
         function toggleTestInputMode(mode) {
-            window.currentInputMode = mode;
-            const selectBtn = document.getElementById("modeSelectBtn");
-            const createBtn = document.getElementById("modeCreateBtn");
-            const testDropdown = document.getElementById("testDropdown");
-            const testTextInput = document.getElementById("testTextInput");
-            const testInputLabel = document.getElementById("testInputLabel");
-            const categoryWrapper = document.getElementById("categoryWrapper");
+            setCurrentInputMode(mode);
+            const dropEl = document.getElementById('testDropdown');
+            const textEl = document.getElementById('testTextInput');
+            const lblEl = document.getElementById('testInputLabel');
+            const btnSelect = document.getElementById('modeSelectBtn');
+            const btnCreate = document.getElementById('modeCreateBtn');
 
-            if (mode === 'select') {
-                selectBtn.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
-                createBtn.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
-                testDropdown.classList.remove("hidden");
-                testDropdown.required = true;
-                testTextInput.classList.add("hidden");
-                testTextInput.required = false;
-                testInputLabel.textContent = "Target Test";
-                if(categoryWrapper) categoryWrapper.classList.add("hidden");
-                window.currentEditingRow = null;
+            if (mode === 'create') {
+                dropEl.classList.add('hidden'); dropEl.removeAttribute('required');
+                textEl.classList.remove('hidden'); textEl.setAttribute('required', 'true');
+                lblEl.innerText = "New Test Name";
+                btnCreate.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
+                btnSelect.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
             } else {
-                createBtn.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
-                selectBtn.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
-                testDropdown.classList.add("hidden");
-                testDropdown.required = false;
-                testTextInput.classList.remove("hidden");
-                testTextInput.required = true;
-                testInputLabel.textContent = "New Test Name";
-                if(window.activeTab === 'in' && categoryWrapper) categoryWrapper.classList.remove("hidden");
-                window.currentEditingRow = null;
+                textEl.classList.add('hidden'); textEl.removeAttribute('required');
+                dropEl.classList.remove('hidden'); dropEl.setAttribute('required', 'true');
+                lblEl.innerText = "Target Test";
+                btnSelect.className = "bg-white text-indigo-600 px-3 py-1 rounded shadow-xs transition-all";
+                btnCreate.className = "text-slate-600 hover:text-slate-900 px-3 py-1 rounded transition-all";
             }
-            document.getElementById("priceForm").reset();
-            populateDropdowns();
         }
 
-        function saveFormPrice(e) {
-            e.preventDefault();
-            const sampleInput = document.getElementById("formSampleInput").value;
-            const tatInput = document.getElementById("formTatInput").value;
-            const ents = window.activeTab === 'out' ? window.entities : window.inEntities;
-
-            let testKey = "";
-            if (window.currentInputMode === 'select' && !window.currentEditingRow) {
-                testKey = document.getElementById("testDropdown").value;
-            } else if (window.currentEditingRow) {
-                testKey = window.currentEditingRow;
-            } else {
-                let rawName = document.getElementById("testTextInput").value.trim();
-                if (!rawName) return alert("Please enter a valid test name.");
-                testKey = sanitizeCloudKey(rawName);
-                if(window.activeTab === 'in') {
-                    let catVal = document.getElementById("categoryDropdown").value;
-                    window.inCategories[testKey] = catVal;
-                }
-            }
-
-            if (!testKey) return alert("Please select or enter a test.");
-
-            let dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-            let metaRef = window.activeTab === 'out' ? window.testMeta : window.inTestMeta;
-
-            if (!dbRef[testKey]) dbRef[testKey] = {};
-            ents.forEach(ent => {
-                let val = parseFloat(document.getElementById(`price_${ent}`)?.value) || 0;
-                dbRef[testKey][ent] = val;
+        function renderDropdown() {
+            const drop = document.getElementById('testDropdown');
+            if(!drop) return;
+            const currentDb = getCurrentDatabase();
+            let html = `<option value="">-- Choose a test --</option>`;
+            Object.keys(currentDb).sort().forEach(key => {
+                let displayName = key.replace(/-/g, '.');
+                html += `<option value="${key}">${displayName}</option>`;
             });
-
-            metaRef[testKey] = { sample: sampleInput, tat: tatInput };
-
-            window.syncCloudStorage();
-            document.getElementById("priceForm").reset();
-            toggleTestInputMode('select');
-            initSystem();
-            alert("Test pricing and metadata updated successfully!");
+            drop.innerHTML = html;
         }
 
-        function selectRowToEdit(testKey) {
-            window.currentEditingRow = testKey;
-            toggleTestInputMode('create');
-
-            let actualName = testKey.replace(/-/g, '.');
-            document.getElementById("testTextInput").value = actualName;
-            document.getElementById("testTextInput").readOnly = true;
-
-            let metaRef = window.activeTab === 'out' ? window.testMeta : window.inTestMeta;
-            let dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-            let catRef = window.activeTab === 'out' ? {} : window.inCategories;
-
-            let meta = metaRef[testKey] || { sample: "Serum", tat: "Daily" };
-            document.getElementById("formSampleInput").value = meta.sample || "Serum";
-            document.getElementById("formTatInput").value = meta.tat || "Daily";
-
-            if(window.activeTab === 'in') {
-                let catDropdown = document.getElementById("categoryDropdown");
-                if(catDropdown) catDropdown.value = catRef[testKey] || "General Chemistry";
-            }
-
-            let prices = dbRef[testKey] || {};
-            const ents = window.activeTab === 'out' ? window.entities : window.inEntities;
-            ents.forEach(ent => {
-                let pInput = document.getElementById(`price_${ent}`);
-                if(pInput) pInput.value = prices[ent] !== undefined ? prices[ent] : '';
+        function renderCloneDropdown() {
+            const drop = document.getElementById('cloneEntityDropdown');
+            if(!drop) return;
+            const currentEnts = getCurrentEntities();
+            let html = `<option value="">-- Blank (Zero Prices) --</option>`;
+            currentEnts.forEach(ent => {
+                html += `<option value="${ent}">${ent}</option>`;
             });
-
-            window.scrollTo({ top: 400, behavior: 'smooth' });
+            drop.innerHTML = html;
         }
 
-        function renderTable() {
-            const tableHeader = document.getElementById("tableHeader");
-            const tableBody = document.getElementById("tableBody");
-            const searchInput = document.getElementById("searchInput");
-            const query = (searchInput ? searchInput.value : "").toLowerCase().trim();
-
-            const ents = window.activeTab === 'out' ? window.entities : window.inEntities;
-            const dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-            const metaRef = window.activeTab === 'out' ? window.testMeta : window.inTestMeta;
-            const catRef = window.activeTab === 'out' ? {} : window.inCategories;
-            const catList = window.activeTab === 'out' ? [] : window.inCategoryList;
-            const catFilter = document.getElementById("categoryFilterSelect")?.value || "ALL";
-
-            if (ents.length === 0) {
-                tableHeader.innerHTML = `<tr><th class="p-4 text-center">No lab entities configured.</th></tr>`;
-                tableBody.innerHTML = `<tr><td class="p-4 text-center text-slate-400">Please upload a spreadsheet or add a lab entity.</td></tr>`;
-                return;
-            }
-
-            let headerHtml = `
-                <tr>
-                    <th class="p-3 w-12 text-center border-r border-slate-200">#</th>
-                    <th class="p-3 w-48 border-r border-slate-200">Test Name</th>
-                    <th class="p-3 w-28 border-r border-slate-200">Sample</th>
-                    <th class="p-3 w-24 border-r border-slate-200">TAT</th>
-            `;
-            ents.forEach(e => {
-                headerHtml += `<th class="p-3 text-right border-r border-slate-200">${e}</th>`;
-            });
-            headerHtml += `<th class="p-3 w-16 text-center">Action</th></tr>`;
-            tableHeader.innerHTML = headerHtml;
-
-            let bodyHtml = "";
-            let counter = 1;
-
-            if (window.activeTab === 'out') {
-                Object.keys(dbRef).sort().forEach(tKey => {
-                    let actualName = tKey.replace(/-/g, '.');
-                    let meta = metaRef[tKey] || { sample: "Serum", tat: "Daily" };
-
-                    if (query && !actualName.toLowerCase().includes(query)) return;
-
-                    let rowClass = window.currentEditingRow === tKey ? "selected-row hover:bg-indigo-50/50 cursor-pointer transition" : "hover:bg-slate-50 cursor-pointer transition";
-                    
-                    bodyHtml += `
-                        <tr onclick="selectRowToEdit('${tKey}')" class="${rowClass}">
-                            <td class="p-3 text-center font-mono text-slate-400 border-r border-slate-100">${counter++}</td>
-                            <td class="p-3 font-semibold text-slate-800 border-r border-slate-100">${actualName}</td>
-                            <td class="p-3 text-slate-600 border-r border-slate-100">${meta.sample || 'Serum'}</td>
-                            <td class="p-3 text-slate-600 border-r border-slate-100">${meta.tat || 'Daily'}</td>
-                    `;
-                    ents.forEach(e => {
-                        let p = dbRef[tKey][e];
-                        let pVal = p !== undefined && p !== null ? parseFloat(p).toFixed(2) : "0.00";
-                        bodyHtml += `<td class="p-3 text-right font-mono text-slate-700 border-r border-slate-100">${pVal}</td>`;
-                    });
-                    bodyHtml += `
-                            <td class="p-3 text-center">
-                                <button onclick="event.stopPropagation(); deleteTestRecord('${tKey}')" class="text-rose-500 hover:text-rose-700 font-bold p-1">🗑</button>
-                            </td>
-                        </tr>
-                    `;
-                });
-            } else {
-                catList.forEach(cat => {
-                    if (catFilter !== "ALL" && catFilter !== cat) return;
-                    
-                    let catTests = Object.keys(dbRef).filter(tKey => (catRef[tKey] || "General Chemistry") === cat);
-                    if (catTests.length === 0) return;
-
-                    let isCollapsed = window.collapsedCategories[cat];
-
-                    bodyHtml += `
-                        <tr class="bg-slate-100/80 font-bold text-slate-700 cursor-pointer" onclick="toggleCategoryCollapse('${cat}')">
-                            <td colspan="${4 + ents.length + 1}" class="p-3">
-                                📁 ${cat} (${catTests.length} tests) ${isCollapsed ? '▶ [Click to Expand]' : '▼ [Click to Collapse]'}
-                            </td>
-                        </tr>
-                    `;
-
-                    if (!isCollapsed) {
-                        catTests.sort().forEach(tKey => {
-                            let actualName = tKey.replace(/-/g, '.');
-                            let meta = metaRef[tKey] || { sample: "Serum", tat: "Daily" };
-
-                            if (query && !actualName.toLowerCase().includes(query)) return;
-
-                            let rowClass = window.currentEditingRow === tKey ? "selected-row hover:bg-indigo-50/50 cursor-pointer transition" : "hover:bg-slate-50 cursor-pointer transition";
-                            
-                            bodyHtml += `
-                                <tr onclick="selectRowToEdit('${tKey}')" class="${rowClass}">
-                                    <td class="p-3 text-center font-mono text-slate-400 border-r border-slate-100">${counter++}</td>
-                                    <td class="p-3 font-semibold text-slate-800 border-r border-slate-100 pl-6">↳ ${actualName}</td>
-                                    <td class="p-3 text-slate-600 border-r border-slate-100">${meta.sample || 'Serum'}</td>
-                                    <td class="p-3 text-slate-600 border-r border-slate-100">${meta.tat || 'Daily'}</td>
-                            `;
-                            ents.forEach(e => {
-                                let p = dbRef[tKey][e];
-                                let pVal = p !== undefined && p !== null ? parseFloat(p).toFixed(2) : "0.00";
-                                bodyHtml += `<td class="p-3 text-right font-mono text-slate-700 border-r border-slate-100">${pVal}</td>`;
-                            });
-                            bodyHtml += `
-                                    <td class="p-3 text-center">
-                                        <button onclick="event.stopPropagation(); deleteTestRecord('${tKey}')" class="text-rose-500 hover:text-rose-700 font-bold p-1">🗑</button>
-                                    </td>
-                                </tr>
-                            `;
-                        });
-                    }
-                });
-            }
-
-            if (bodyHtml === "") {
-                bodyHtml = `<tr><td colspan="${4 + ents.length + 1}" class="p-8 text-center text-slate-400">No matching records found.</td></tr>`;
-            }
-            tableBody.innerHTML = bodyHtml;
-        }
-
-        function toggleCategoryCollapse(cat) {
-            window.collapsedCategories[cat] = !window.collapsedCategories[cat];
-            renderTable();
-        }
-
-        function updateStats() {
-            const dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-            const ents = window.activeTab === 'out' ? window.entities : window.inEntities;
-            
-            document.getElementById("statTests").textContent = Object.keys(dbRef).length;
-            document.getElementById("statEntities").textContent = ents.length;
-        }
-
-        function addNewEntity() {
-            const input = document.getElementById("newEntityInput");
-            const cloneDropdown = document.getElementById("cloneEntityDropdown");
-            const newName = input.value.trim();
-            if(!newName) return alert("Please enter a valid lab entity name.");
-
-            let ents = window.activeTab === 'out' ? window.entities : window.inEntities;
-            if(ents.includes(newName)) return alert("Lab entity already exists.");
-
-            let cloneFrom = cloneDropdown ? cloneDropdown.value : "";
-            let dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-
-            ents.push(newName);
-
-            Object.keys(dbRef).forEach(tKey => {
-                if(cloneFrom && dbRef[tKey][cloneFrom] !== undefined) {
-                    dbRef[tKey][newName] = dbRef[tKey][cloneFrom];
-                } else {
-                    dbRef[tKey][newName] = 0;
-                }
-            });
-
-            window.syncCloudStorage();
-            input.value = "";
-            initSystem();
-            alert(`Lab entity "${newName}" added successfully!`);
-        }
-
-        function deleteTestRecord(tKey) {
-            if(!confirm(`Are you sure you want to delete this test record?`)) return;
-            let dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-            let metaRef = window.activeTab === 'out' ? window.testMeta : window.inTestMeta;
-            let catRef = window.activeTab === 'out' ? {} : window.inCategories;
-
-            delete dbRef[tKey];
-            delete metaRef[tKey];
-            if(catRef[tKey]) delete catRef[tKey];
-
-            window.syncCloudStorage();
-            initSystem();
-        }
-
-        // --- Category Management Modal Functions ---
-        function openCategoryManagerModal() {
-            document.getElementById("categoryManagerModal").classList.remove("hidden");
-            renderCategoryManagerList();
-        }
-
-        function closeCategoryManagerModal() {
-            document.getElementById("categoryManagerModal").classList.add("hidden");
-            initSystem();
-        }
-
-        function renderCategoryManagerList() {
-            const container = document.getElementById("categoryListContainer");
+        function renderCategoryDropdown() {
+            const drop = document.getElementById('categoryDropdown');
+            if(!drop) return;
+            let cats = window.inCategoryList || [];
             let html = '';
-            window.inCategoryList.forEach((cat, index) => {
+            cats.forEach(c => {
+                html += `<option value="${c}">${c}</option>`;
+            });
+            drop.innerHTML = html;
+        }
+
+        function renderCategoryFilterDropdown() {
+            const drop = document.getElementById('categoryFilterSelect');
+            if(!drop) return;
+            let cats = window.inCategoryList || [];
+            let html = `<option value="ALL">📁 All Categories</option>`;
+            cats.forEach(c => {
+                html += `<option value="${c}">${c}</option>`;
+            });
+            drop.innerHTML = html;
+        }
+
+        function renderCategoryFilterModalList() {
+            const container = document.getElementById('categoryListContainer');
+            if(!container) return;
+            let cats = window.inCategoryList || [];
+            let html = '';
+            cats.forEach(c => {
                 html += `
-                    <div class="p-3 flex justify-between items-center text-xs">
-                        <span class="font-semibold text-slate-800">${cat}</span>
-                        ${window.inCategoryList.length > 1 ? `<button onclick="deleteCategory('${cat}')" class="text-rose-600 hover:text-rose-800 font-bold px-2 py-1 rounded bg-rose-50">Delete</button>` : `<span class="text-slate-400 text-[10px]">Default</span>`}
+                    <div class="p-3 flex items-center justify-between text-xs">
+                        <span class="font-semibold text-slate-800">${c}</span>
+                        ${cats.length > 1 ? `<button onclick="deleteCategory('${c}')" class="text-rose-600 hover:text-rose-800 font-semibold px-2 py-1 bg-rose-50 rounded">Delete</button>` : `<span class="text-slate-400 italic">Default</span>`}
                     </div>
                 `;
             });
             container.innerHTML = html;
         }
 
-        function addNewCategoryFromModal() {
-            const input = document.getElementById("modalNewCategoryInput");
-            const newCat = input.value.trim();
-            if(!newCat) return alert("Please enter a category name.");
-            if(window.inCategoryList.includes(newCat)) return alert("Category already exists.");
+        function openCategoryManagerModal() {
+            renderCategoryFilterModalList();
+            document.getElementById('categoryManagerModal').classList.remove('hidden');
+        }
 
-            window.inCategoryList.push(newCat);
-            input.value = "";
-            renderCategoryManagerList();
-            window.syncCloudStorage();
+        function closeCategoryManagerModal() {
+            document.getElementById('categoryManagerModal').classList.add('hidden');
+            initSystem();
+        }
+
+        function addNewCategoryFromModal() {
+            const input = document.getElementById('modalNewCategoryInput');
+            const val = input.value.trim();
+            if(!val) return;
+            if(!window.inCategoryList.includes(val)) {
+                window.inCategoryList.push(val);
+                input.value = '';
+                renderCategoryFilterModalList();
+            }
         }
 
         function deleteCategory(catName) {
-            if(!confirm(`Are you sure you want to delete category "${catName}"? Tests in this category will be moved to "General Chemistry".`)) return;
+            if(window.inCategoryList.length <= 1) {
+                alert("You must keep at least one category.");
+                return;
+            }
+            if(confirm(`Are you sure you want to delete category "${catName}"? Associated tests will be moved to "General Chemistry".`)) {
+                window.inCategoryList = window.inCategoryList.filter(c => c !== catName);
+                Object.keys(window.inCategories).forEach(k => {
+                    if(window.inCategories[k] === catName) {
+                        window.inCategories[k] = window.inCategoryList[0] || "General Chemistry";
+                    }
+                });
+                renderCategoryFilterModalList();
+            }
+        }
 
-            window.inCategoryList = window.inCategoryList.filter(c => c !== catName);
-            if(!window.inCategoryList.includes("General Chemistry")) {
-                window.inCategoryList.unshift("General Chemistry");
+        function renderFormFields() {
+            const container = document.getElementById('dynamicFormPrices');
+            if(!container) return;
+            const currentEnts = getCurrentEntities();
+            let html = '';
+            currentEnts.forEach(ent => {
+                html += `
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-400 mb-0.5 truncate">${ent}</label>
+                        <input type="number" step="0.01" id="price_input_${sanitizeCloudKey(ent)}" placeholder="0.00" class="w-full border border-slate-300 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50/50">
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function toggleCategoryCollapse(categoryName) {
+            window.collapsedCategories[categoryName] = !window.collapsedCategories[categoryName];
+            renderTable();
+        }
+
+        function renderTable() {
+            const header = document.getElementById('tableHeader');
+            const body = document.getElementById('tableBody');
+            if(!header || !body) return;
+
+            const currentEnts = getCurrentEntities();
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            const searchVal = (document.getElementById('searchInput')?.value || '').toLowerCase();
+            const catFilter = document.getElementById('categoryFilterSelect')?.value || 'ALL';
+
+            let headHtml = `<tr>
+                <th class="px-4 py-3 w-10 text-center">#</th>
+                <th class="px-4 py-3 w-48">Test Name</th>
+                <th class="px-4 py-3 w-28">Sample</th>
+                <th class="px-4 py-3 w-24">TAT</th>`;
+
+            currentEnts.forEach(ent => {
+                headHtml += `<th class="px-4 py-3 text-right">${ent}</th>`;
+            });
+            headHtml += `<th class="px-4 py-3 text-center w-16">Action</th></tr>`;
+            header.innerHTML = headHtml;
+
+            let testKeys = Object.keys(currentDb).sort();
+            let rowsHtml = '';
+            let counter = 0;
+
+            if (window.activeTab === 'in') {
+                let categoriesToDisplay = catFilter === 'ALL' ? (window.inCategoryList || []) : [catFilter];
+                let totalColSpan = currentEnts.length + 5;
+
+                categoriesToDisplay.forEach(category => {
+                    let catTests = testKeys.filter(key => {
+                        let testName = key.replace(/-/g, '.');
+                        let cat = window.inCategories[key] || 'General Chemistry';
+                        if(cat !== category) return false;
+                        if(searchVal && !testName.toLowerCase().includes(searchVal)) return false;
+                        return true;
+                    }).sort();
+
+                    if(catTests.length === 0 && catFilter !== 'ALL') return;
+
+                    let isCollapsed = !!window.collapsedCategories[category];
+
+                    // Category Header Row with single cell spanning all columns
+                    rowsHtml += `
+                        <tr onclick="toggleCategoryCollapse('${category}')" class="bg-indigo-100/70 hover:bg-indigo-200/70 cursor-pointer font-bold text-indigo-900 border-t-2 border-indigo-200">
+                            <td colspan="${totalColSpan}" class="px-4 py-2.5">
+                                <div class="flex items-center gap-2">
+                                    <span>${isCollapsed ? '▶' : '▼'}</span>
+                                    <span class="text-xs uppercase tracking-wider">📁 ${category}</span>
+                                    <span class="text-[10px] font-normal text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full ml-2">(${catTests.length} tests)</span>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+
+                    if(!isCollapsed) {
+                        catTests.forEach(key => {
+                            let testName = key.replace(/-/g, '.');
+                            let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
+
+                            counter++;
+                            let isSelected = window.currentEditingRow === key;
+
+                            rowsHtml += `<tr onclick="loadTestIntoForm('${key}')" class="hover:bg-indigo-50/40 cursor-pointer transition ${isSelected ? 'selected-row' : ''}">
+                                <td class="px-4 py-2.5 text-center font-mono text-[10px] text-slate-400">${counter}</td>
+                                <td class="px-4 py-2.5 font-bold text-slate-800">${testName}</td>
+                                <td class="px-4 py-2.5 text-slate-500">${meta.sample || 'Serum'}</td>
+                                <td class="px-4 py-2.5 text-slate-500">${meta.tat || 'Daily'}</td>`;
+
+                            currentEnts.forEach(ent => {
+                                let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
+                                rowsHtml += `<td class="px-4 py-2.5 text-right font-mono font-medium text-slate-700">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                            });
+
+                            rowsHtml += `
+                                <td class="px-4 py-2.5 text-center" onclick="event.stopPropagation()">
+                                    <button onclick="deleteTestRecord('${key}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 transition">✕</button>
+                                </td>
+                            </tr>`;
+                        });
+                    }
+                });
+
+            } else {
+                testKeys.forEach(key => {
+                    let testName = key.replace(/-/g, '.');
+                    let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
+
+                    if (searchVal && !testName.toLowerCase().includes(searchVal)) return;
+
+                    counter++;
+                    let isSelected = window.currentEditingRow === key;
+
+                    rowsHtml += `<tr onclick="loadTestIntoForm('${key}')" class="hover:bg-indigo-50/40 cursor-pointer transition ${isSelected ? 'selected-row' : ''}">
+                        <td class="px-4 py-2.5 text-center font-mono text-[10px] text-slate-400">${counter}</td>
+                        <td class="px-4 py-2.5 font-bold text-slate-800">${testName}</td>
+                        <td class="px-4 py-2.5 text-slate-500">${meta.sample || 'Serum'}</td>
+                        <td class="px-4 py-2.5 text-slate-500">${meta.tat || 'Daily'}</td>`;
+
+                    currentEnts.forEach(ent => {
+                        let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
+                        rowsHtml += `<td class="px-4 py-2.5 text-right font-mono font-medium text-slate-700">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                    });
+
+                    rowsHtml += `
+                        <td class="px-4 py-2.5 text-center" onclick="event.stopPropagation()">
+                            <button onclick="deleteTestRecord('${key}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 transition">✕</button>
+                        </td>
+                    `;
+                });
             }
 
-            Object.keys(window.inCategories).forEach(tKey => {
-                if(window.inCategories[tKey] === catName) {
-                    window.inCategories[tKey] = "General Chemistry";
+            if (counter === 0 && window.activeTab === 'out') {
+                let colSpan = currentEnts.length + 5;
+                rowsHtml = `<tr><td colspan="${colSpan}" class="text-center py-8 text-slate-400">No matching test records found.</td></tr>`;
+            }
+
+            body.innerHTML = rowsHtml;
+        }
+
+        function loadTestIntoForm(key) {
+            window.currentEditingRow = key;
+            toggleTestInputMode('select');
+            const drop = document.getElementById('testDropdown');
+            if(drop) drop.value = key;
+
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            const currentEnts = getCurrentEntities();
+            const meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
+
+            document.getElementById('formSampleInput').value = meta.sample || 'Serum';
+            document.getElementById('formTatInput').value = meta.tat || 'Daily';
+
+            if (window.activeTab === 'in') {
+                const catDrop = document.getElementById('categoryDropdown');
+                if(catDrop) catDrop.value = window.inCategories[key] || 'General Chemistry';
+            }
+
+            currentEnts.forEach(ent => {
+                let inp = document.getElementById(`price_input_${sanitizeCloudKey(ent)}`);
+                if(inp) {
+                    let val = currentDb[key] && currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
+                    inp.value = val;
                 }
             });
 
-            renderCategoryManagerList();
-            window.syncCloudStorage();
+            renderTable();
         }
 
-        // --- Export Functions ---
+        function saveFormPrice(event) {
+            event.preventDefault();
+            const mode = getCurrentInputMode();
+            let testKey = '';
+
+            if (mode === 'create') {
+                let rawName = document.getElementById('testTextInput').value.trim();
+                if(!rawName) return;
+                testKey = sanitizeCloudKey(rawName);
+            } else {
+                testKey = document.getElementById('testDropdown').value;
+                if(!testKey) {
+                    alert("Please select a test.");
+                    return;
+                }
+            }
+
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            const currentEnts = getCurrentEntities();
+
+            if(!currentDb[testKey]) currentDb[testKey] = {};
+            if(!currentMeta[testKey]) currentMeta[testKey] = {};
+
+            currentMeta[testKey].sample = document.getElementById('formSampleInput').value.trim() || 'Serum';
+            currentMeta[testKey].tat = document.getElementById('formTatInput').value.trim() || 'Daily';
+
+            if (window.activeTab === 'in') {
+                const catVal = document.getElementById('categoryDropdown').value;
+                window.inCategories[testKey] = catVal;
+            }
+
+            currentEnts.forEach(ent => {
+                let inp = document.getElementById(`price_input_${sanitizeCloudKey(ent)}`);
+                if(inp) {
+                    let val = inp.value.trim();
+                    if(val !== '') {
+                        currentDb[testKey][ent] = parseFloat(val);
+                    } else {
+                        delete currentDb[testKey][ent];
+                    }
+                }
+            });
+
+            window.currentEditingRow = testKey;
+            window.syncCloudStorage();
+            initSystem();
+            logMessage(`Successfully saved record for: ${testKey.replace(/-/g, '.')}`, "success");
+        }
+
+        function deleteTestRecord(key) {
+            let testName = key.replace(/-/g, '.');
+            if(confirm(`Are you sure you want to delete test "${testName}" from the database?`)) {
+                let currentDb = getCurrentDatabase();
+                let currentMeta = getCurrentMeta();
+                delete currentDb[key];
+                delete currentMeta[key];
+                if(window.activeTab === 'in') {
+                    delete window.inCategories[key];
+                }
+                if(window.currentEditingRow === key) window.currentEditingRow = null;
+                window.syncCloudStorage();
+                initSystem();
+                logMessage(`Deleted test: ${testName}`, "success");
+            }
+        }
+
+        function addNewEntity() {
+            const input = document.getElementById('newEntityInput');
+            const cloneDropdown = document.getElementById('cloneEntityDropdown');
+            const newName = input.value.trim();
+            if(!newName) {
+                alert("Please enter a valid lab name.");
+                return;
+            }
+
+            let currentEnts = getCurrentEntities();
+            if(currentEnts.includes(newName)) {
+                alert("A lab entity with this name already exists.");
+                return;
+            }
+
+            let cloneSource = cloneDropdown.value;
+            currentEnts.push(newName);
+            let currentDb = getCurrentDatabase();
+
+            if(cloneSource && cloneSource !== "") {
+                Object.keys(currentDb).forEach(testKey => {
+                    if(currentDb[testKey][cloneSource] !== undefined) {
+                        currentDb[testKey][newName] = currentDb[testKey][cloneSource];
+                    }
+                });
+            }
+
+            input.value = '';
+            cloneDropdown.value = '';
+            window.syncCloudStorage();
+            initSystem();
+            logMessage(`Successfully added lab entity: ${newName}`, "success");
+        }
+
+        // --- Excel Upload Integration ---
+        function bindExcelUploadListener() {
+            const fileInput = document.getElementById('excelFile');
+            if(!fileInput) return;
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if(!file) return;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                        
+                        if(json.length < 2) {
+                            alert("The uploaded Excel sheet appears empty or invalid.");
+                            return;
+                        }
+
+                        let headers = json[0];
+                        let currentEnts = [];
+                        
+                        for(let i = 2; i < headers.length; i++) {
+                            if(headers[i]) currentEnts.push(String(headers[i]).trim());
+                        }
+
+                        if(currentEnts.length === 0) {
+                            alert("Could not detect lab entities in header row.");
+                            return;
+                        }
+
+                        if(window.activeTab === 'out') {
+                            window.entities = currentEnts;
+                            window.testDatabase = {};
+                            window.testMeta = {};
+                        } else {
+                            window.inEntities = currentEnts;
+                            window.inTestDatabase = {};
+                            window.inCategories = {};
+                            window.inTestMeta = {};
+                        }
+
+                        let currentDb = getCurrentDatabase();
+                        let currentMeta = getCurrentMeta();
+
+                        for(let r = 1; r < json.length; r++) {
+                            let row = json[r];
+                            if(!row || !row[1]) continue;
+                            let testName = String(row[1]).trim();
+                            let key = sanitizeCloudKey(testName);
+                            let sample = row[2] || 'Serum';
+                            let tat = row[3] || 'Daily';
+
+                            currentMeta[key] = { sample: String(sample), tat: String(tat) };
+                            currentDb[key] = {};
+
+                            if(window.activeTab === 'in') {
+                                let cat = row[4] || 'General Chemistry';
+                                window.inCategories[key] = String(cat);
+                                if(!window.inCategoryList.includes(String(cat))) {
+                                    window.inCategoryList.push(String(cat));
+                                }
+                            }
+
+                            currentEnts.forEach((ent, idx) => {
+                                let colIdx = (window.activeTab === 'in' ? 5 : 4) + idx;
+                                if(row[colIdx] !== undefined && row[colIdx] !== "") {
+                                    let val = parseFloat(row[colIdx]);
+                                    if(!isNaN(val)) currentDb[key][ent] = val;
+                                }
+                            });
+                        }
+
+                        if(window.activeTab === 'in') initializeReferralInDefaults();
+
+                        window.syncCloudStorage();
+                        initSystem();
+                        logMessage("Successfully parsed and uploaded master Excel sheet.", "success");
+                    } catch (err) {
+                        logMessage("Excel parsing error: " + err.message, "error");
+                        alert("Error parsing Excel file. Please review console logs.");
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // --- Export Modal Management ---
         function openExportModal(type) {
             window.pendingExportType = type;
-            document.getElementById("exportModal").classList.remove("hidden");
-            toggleModalLabSelector();
+            const drop = document.getElementById('modalLabDropdown');
+            const currentEnts = getCurrentEntities();
+            let html = '';
+            currentEnts.forEach(ent => {
+                html += `<option value="${ent}">${ent}</option>`;
+            });
+            drop.innerHTML = html;
+            document.getElementById('exportScopeSelect').value = 'all';
+            document.getElementById('modalLabContainer').classList.add('hidden');
+            document.getElementById('exportModal').classList.remove('hidden');
         }
 
         function closeExportModal() {
-            document.getElementById("exportModal").classList.add("hidden");
+            document.getElementById('exportModal').classList.add('hidden');
             window.pendingExportType = null;
         }
 
         function toggleModalLabSelector() {
-            const scope = document.getElementById("exportScopeSelect").value;
-            const labContainer = document.getElementById("modalLabContainer");
-            if(scope === 'single') {
-                labContainer.classList.remove('hidden');
-            } else {
-                labContainer.classList.add('hidden');
-            }
+            const scope = document.getElementById('exportScopeSelect').value;
+            const container = document.getElementById('modalLabContainer');
+            if(scope === 'single') container.classList.remove('hidden');
+            else container.classList.add('hidden');
         }
 
         function executeExport() {
             const type = window.pendingExportType;
-            const scope = document.getElementById("exportScopeSelect").value;
-            const targetLab = document.getElementById("modalLabDropdown").value;
+            const scope = document.getElementById('exportScopeSelect').value;
+            const selectedLab = document.getElementById('modalLabDropdown').value;
             closeExportModal();
 
-            if(type === 'excel') {
-                exportToExcel(scope, targetLab);
-            } else if(type === 'word') {
-                exportToWord(scope, targetLab);
-            } else if(type === 'pdf') {
-                exportToPDF(scope, targetLab);
-            }
+            if(type === 'excel') exportToExcel(scope, selectedLab);
+            else if(type === 'word') exportToWord(scope, selectedLab);
+            else if(type === 'pdf') exportToPDF(scope, selectedLab);
         }
 
-        function exportToExcel(scope, targetLab) {
-            const dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-            const metaRef = window.activeTab === 'out' ? window.testMeta : window.inTestMeta;
-            const ents = window.activeTab === 'out' ? window.entities : window.inEntities;
+        function exportToExcel(scope, selectedLab) {
+            const currentEnts = getCurrentEntities();
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            let rows = [];
 
-            let aoa = [];
-            if(scope === 'all') {
-                let header = ["Test Name", "Sample", "TAT"];
-                ents.forEach(e => header.push(e));
-                aoa.push(header);
-
-                Object.keys(dbRef).sort().forEach(tKey => {
-                    let actualName = tKey.replace(/-/g, '.');
-                    let meta = metaRef[tKey] || { sample: "Serum", tat: "Daily" };
-                    let row = [actualName, meta.sample || 'Serum', meta.tat || 'Daily'];
-                    ents.forEach(e => {
-                        row.push(dbRef[tKey][e] !== undefined ? dbRef[tKey][e] : 0);
-                    });
-                    aoa.push(row);
-                });
-            } else {
-                aoa.push([`BioSenses Price List - ${targetLab}`]);
-                aoa.push([]);
-                aoa.push(["Test Name", "Sample", "TAT", "Price"]);
-
-                Object.keys(dbRef).sort().forEach(tKey => {
-                    let actualName = tKey.replace(/-/g, '.');
-                    let meta = metaRef[tKey] || { sample: "Serum", tat: "Daily" };
-                    let price = dbRef[tKey][targetLab] !== undefined ? dbRef[tKey][targetLab] : 0;
-                    aoa.push([actualName, meta.sample || 'Serum', meta.tat || 'Daily', price]);
-                });
-            }
-
-            const ws = XLSX.utils.aoa_to_sheet(aoa);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Price List");
-            XLSX.writeFile(wb, `BioSenses_${window.activeTab}_PriceList_${scope === 'all' ? 'Matrix' : targetLab}.xlsx`);
-        }
-
-        function exportToWord(scope, targetLab) {
-            const dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-            const metaRef = window.activeTab === 'out' ? window.testMeta : window.inTestMeta;
-            const ents = window.activeTab === 'out' ? window.entities : window.inEntities;
-
-            let htmlContent = `
-                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-                <head><title>BioSenses Export</title><style>body{font-family:Arial;}</style></head>
-                <body>
-                <h2>BioSenses Price List (${window.activeTab === 'out' ? 'Referral Out' : 'Referral In'})</h2>
-                <p>Scope: ${scope === 'all' ? 'All Labs Matrix' : targetLab}</p>
-                <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;width:100%;font-size:12px;">
-                <tr style="background:#f2f2f2;"><th>Test Name</th><th>Sample</th><th>TAT</th>
-            `;
-
-            if(scope === 'all') {
-                ents.forEach(e => htmlContent += `<th>${e}</th>`);
-            } else {
-                htmlContent += `<th>Price (${targetLab})</th>`;
-            }
-            htmlContent += `</tr>`;
-
-            Object.keys(dbRef).sort().forEach(tKey => {
-                let actualName = tKey.replace(/-/g, '.');
-                let meta = metaRef[tKey] || { sample: "Serum", tat: "Daily" };
-                htmlContent += `<tr><td>${actualName}</td><td>${meta.sample}</td><td>${meta.tat}</td>`;
-                if(scope === 'all') {
-                    ents.forEach(e => {
-                        let p = dbRef[tKey][e] !== undefined ? dbRef[tKey][e] : 0;
-                        htmlContent += `<td>${p}</td>`;
+            if(window.activeTab === 'in') {
+                let categories = window.inCategoryList || [];
+                if(scope === 'single') {
+                    rows.push(['#', 'Test Name', 'Sample', 'TAT', selectedLab]);
+                    let idx = 1;
+                    categories.forEach(category => {
+                        rows.push([`CATEGORY: ${category}`]);
+                        let catTests = Object.keys(currentDb).filter(key => (window.inCategories[key] || 'General Chemistry') === category).sort();
+                        catTests.forEach(key => {
+                            let testName = key.replace(/-/g, '.');
+                            let meta = currentMeta[key] || {};
+                            let price = currentDb[key][selectedLab] !== undefined ? currentDb[key][selectedLab] : '';
+                            rows.push([idx++, testName, meta.sample || 'Serum', meta.tat || 'Daily', price]);
+                        });
                     });
                 } else {
-                    let p = dbRef[tKey][targetLab] !== undefined ? dbRef[tKey][targetLab] : 0;
-                    htmlContent += `<td>${p}</td>`;
+                    let header = ['#', 'Test Name', 'Sample', 'TAT', ...currentEnts];
+                    rows.push(header);
+                    let idx = 1;
+                    categories.forEach(category => {
+                        rows.push([`CATEGORY: ${category}`]);
+                        let catTests = Object.keys(currentDb).filter(key => (window.inCategories[key] || 'General Chemistry') === category).sort();
+                        catTests.forEach(key => {
+                            let testName = key.replace(/-/g, '.');
+                            let meta = currentMeta[key] || {};
+                            let rowData = [idx++, testName, meta.sample || 'Serum', meta.tat || 'Daily'];
+                            currentEnts.forEach(ent => {
+                                rowData.push(currentDb[key][ent] !== undefined ? currentDb[key][ent] : '');
+                            });
+                            rows.push(rowData);
+                        });
+                    });
                 }
-                htmlContent += `</tr>`;
-            });
+            } else {
+                if(scope === 'single') {
+                    rows.push(['#', 'Test Name', 'Sample', 'TAT', selectedLab]);
+                    let idx = 1;
+                    Object.keys(currentDb).sort().forEach(key => {
+                        let testName = key.replace(/-/g, '.');
+                        let meta = currentMeta[key] || {};
+                        let price = currentDb[key][selectedLab] !== undefined ? currentDb[key][selectedLab] : '';
+                        rows.push([idx++, testName, meta.sample || 'Serum', meta.tat || 'Daily', price]);
+                    });
+                } else {
+                    let header = ['#', 'Test Name', 'Sample', 'TAT', ...currentEnts];
+                    rows.push(header);
+                    let idx = 1;
+                    Object.keys(currentDb).sort().forEach(key => {
+                        let testName = key.replace(/-/g, '.');
+                        let meta = currentMeta[key] || {};
+                        let rowData = [idx++, testName, meta.sample || 'Serum', meta.tat || 'Daily'];
+                        currentEnts.forEach(ent => {
+                            rowData.push(currentDb[key][ent] !== undefined ? currentDb[key][ent] : '');
+                        });
+                        rows.push(rowData);
+                    });
+                }
+            }
 
-            htmlContent += `</table></body></html>`;
-
-            let blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
-            let url = URL.createObjectURL(blob);
-            let a = document.createElement('a');
-            a.href = url;
-            a.download = `BioSenses_${window.activeTab}_PriceList.doc`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            const worksheet = XLSX.utils.aoa_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Pricing Report");
+            XLSX.writeFile(workbook, `BioSenses_${window.activeTab.toUpperCase()}_Report_${scope === 'single' ? selectedLab : 'Matrix'}.xlsx`);
         }
 
-        function exportToPDF(scope, targetLab) {
-            const dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-            const metaRef = window.activeTab === 'out' ? window.testMeta : window.inTestMeta;
-            const ents = window.activeTab === 'out' ? window.entities : window.inEntities;
+        // --- Categorized HTML Generator for Word & PDF Exports ---
+        function generateExportTableHTML(scope, selectedLab) {
+            const currentEnts = getCurrentEntities();
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            const searchVal = (document.getElementById('searchInput')?.value || '').toLowerCase();
+            const catFilter = document.getElementById('categoryFilterSelect')?.value || 'ALL';
 
-            let printWindow = window.open('', '_blank');
+            let title = `BioSenses ${window.activeTab === 'in' ? 'Referral In' : 'Referral Out'} Pricing Report`;
+            if (scope === 'single') {
+                title += ` - ${selectedLab}`;
+            } else {
+                title += ` - Full Matrix`;
+            }
+
             let html = `
-                <html>
-                <head>
-                    <title>BioSenses Price List</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; font-size: 11px; color: #333; }
-                        h2 { margin-bottom: 5px; }
-                        p { color: #666; margin-top: 0; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-                        th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-                        th { background-color: #f8fafc; font-weight: bold; }
-                        .text-right { text-align: right; }
-                    </style>
-                </head>
-                <body>
-                    <h2>BioSenses Price List (${window.activeTab === 'out' ? 'Referral Out' : 'Referral In'})</h2>
-                    <p>Scope: ${scope === 'all' ? 'All Labs Matrix' : targetLab}</p>
-                    <table>
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                    <h2 style="margin-bottom: 5px; color: #1e293b;">${title}</h2>
+                    <p style="font-size: 11px; color: #64748b; margin-bottom: 20px;">Generated on: ${new Date().toLocaleString()}</p>
+                    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 11px; text-align: left;">
                         <thead>
-                            <tr>
+                            <tr style="background-color: #f1f5f9; color: #334155;">
+                                <th style="width: 40px; text-align: center;">#</th>
                                 <th>Test Name</th>
                                 <th>Sample</th>
                                 <th>TAT</th>
             `;
-            if(scope === 'all') {
-                ents.forEach(e => html += `<th class="text-right">${e}</th>`);
+
+            if (scope === 'single') {
+                html += `<th style="text-align: right;">${selectedLab}</th>`;
             } else {
-                html += `<th class="text-right">Price (${targetLab})</th>`;
+                currentEnts.forEach(ent => {
+                    html += `<th style="text-align: right;">${ent}</th>`;
+                });
             }
             html += `</tr></thead><tbody>`;
 
-            Object.keys(dbRef).sort().forEach(tKey => {
-                let actualName = tKey.replace(/-/g, '.');
-                let meta = metaRef[tKey] || { sample: "Serum", tat: "Daily" };
-                html += `<tr><td>${actualName}</td><td>${meta.sample}</td><td>${meta.tat}</td>`;
-                if(scope === 'all') {
-                    ents.forEach(e => {
-                        let p = dbRef[tKey][e] !== undefined ? dbRef[tKey][e] : 0;
-                        html += `<td class="text-right">${parseFloat(p).toFixed(2)}</td>`;
+            let testKeys = Object.keys(currentDb).sort();
+            let counter = 0;
+
+            if (window.activeTab === 'in') {
+                let categoriesToDisplay = catFilter === 'ALL' ? (window.inCategoryList || []) : [catFilter];
+                let totalColSpan = (scope === 'single' ? 1 : currentEnts.length) + 4;
+
+                categoriesToDisplay.forEach(category => {
+                    let catTests = testKeys.filter(key => {
+                        let testName = key.replace(/-/g, '.');
+                        let cat = window.inCategories[key] || 'General Chemistry';
+                        if(cat !== category) return false;
+                        if(searchVal && !testName.toLowerCase().includes(searchVal)) return false;
+                        return true;
+                    }).sort();
+
+                    if(catTests.length === 0 && catFilter !== 'ALL') return;
+
+                    // Category Header Row in Export spanning full width
+                    html += `
+                        <tr style="background-color: #e2e8f0; font-weight: bold; color: #1e293b;">
+                            <td colspan="${totalColSpan}" style="padding: 10px; font-size: 12px;">📁 ${category} (${catTests.length} tests)</td>
+                        </tr>
+                    `;
+
+                    catTests.forEach(key => {
+                        let testName = key.replace(/-/g, '.');
+                        let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
+
+                        counter++;
+                        html += `<tr>`;
+                        html += `<td style="text-align: center; color: #64748b;">${counter}</td>`;
+                        html += `<td style="font-weight: bold;">${testName}</td>`;
+                        html += `<td>${meta.sample || 'Serum'}</td>`;
+                        html += `<td>${meta.tat || 'Daily'}</td>`;
+
+                        if (scope === 'single') {
+                            let priceVal = currentDb[key][selectedLab] !== undefined ? currentDb[key][selectedLab] : '';
+                            html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                        } else {
+                            currentEnts.forEach(ent => {
+                                let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
+                                html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                            });
+                        }
+                        html += `</tr>`;
                     });
-                } else {
-                    let p = dbRef[tKey][targetLab] !== undefined ? dbRef[tKey][targetLab] : 0;
-                    html += `<td class="text-right">${parseFloat(p).toFixed(2)}</td>`;
-                }
-                html += `</tr>`;
+                });
+
+            } else {
+                testKeys.forEach(key => {
+                    let testName = key.replace(/-/g, '.');
+                    let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
+
+                    if (searchVal && !testName.toLowerCase().includes(searchVal)) return;
+
+                    counter++;
+                    html += `<tr>`;
+                    html += `<td style="text-align: center; color: #64748b;">${counter}</td>`;
+                    html += `<td style="font-weight: bold;">${testName}</td>`;
+                    html += `<td>${meta.sample || 'Serum'}</td>`;
+                    html += `<td>${meta.tat || 'Daily'}</td>`;
+
+                    if (scope === 'single') {
+                        let priceVal = currentDb[key][selectedLab] !== undefined ? currentDb[key][selectedLab] : '';
+                        html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                    } else {
+                        currentEnts.forEach(ent => {
+                            let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
+                            html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                        });
+                    }
+                    html += `</tr>`;
+                });
+            }
+
+            if (counter === 0) {
+                let colSpan = (scope === 'single' ? 1 : currentEnts.length) + 4;
+                html += `<tr><td colspan="${colSpan}" style="text-align: center; color: #94a3b8; padding: 20px;">No matching records found.</td></tr>`;
+            }
+
+            html += `</tbody></table></div>`;
+            return html;
+        }
+
+        function exportToWord(scope, selectedLab) {
+            const tableHTML = generateExportTableHTML(scope, selectedLab);
+            const blob = new Blob(['\ufeff' + tableHTML], {
+                type: 'application/msword'
             });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `BioSenses_${window.activeTab.toUpperCase()}_Report_${scope === 'single' ? selectedLab : 'Matrix'}.doc`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
 
-            html += `</tbody></table></body></html>`;
-            printWindow.document.write(html);
+        function exportToPDF(scope, selectedLab) {
+            const tableHTML = generateExportTableHTML(scope, selectedLab);
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>BioSenses Pricing Report</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                        th, td { border: 1px solid #cbd5e1; padding: 8px 12px; font-size: 11px; }
+                        th { background-color: #f1f5f9; color: #334155; text-align: left; }
+                        td { color: #334155; }
+                    </style>
+                </head>
+                <body>
+                    ${tableHTML}
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                            window.close();
+                        };
+                    <\/script>
+                </body>
+                </html>
+            `);
             printWindow.document.close();
-            printWindow.focus();
-            setTimeout(() => { printWindow.print(); }, 500);
         }
 
-        function handleFileUpload() {
-            const fileInput = document.getElementById("excelFile");
-            if (!fileInput.files.length) return alert("Please select an Excel file first.");
-
-            let file = fileInput.files[0];
-            let reader = new FileReader();
-
-            reader.onload = function(e) {
-                let data = new Uint8Array(e.target.result);
-                let workbook = XLSX.read(data, { type: 'array' });
-                let firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                let rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-
-                if(rows.length < 2) return alert("Invalid spreadsheet format.");
-
-                let header = rows[0];
-                let detectedEnts = header.slice(3);
-                if(window.activeTab === 'out') {
-                    window.entities = detectedEnts;
-                } else {
-                    window.inEntities = detectedEnts;
-                }
-
-                let dbRef = window.activeTab === 'out' ? window.testDatabase : window.inTestDatabase;
-                let metaRef = window.activeTab === 'out' ? window.testMeta : window.inTestMeta;
-                let catRef = window.activeTab === 'out' ? {} : window.inCategories;
-
-                for(let i = 1; i < rows.length; i++) {
-                    let r = rows[i];
-                    if(!r[0]) continue;
-                    let testName = String(r[0]).trim();
-                    let tKey = sanitizeCloudKey(testName);
-                    let sample = r[1] || "Serum";
-                    let tat = r[2] || "Daily";
-
-                    metaRef[tKey] = { sample, tat };
-                    if(!dbRef[tKey]) dbRef[tKey] = {};
-
-                    detectedEnts.forEach((ent, idx) => {
-                        let pVal = parseFloat(r[3 + idx]) || 0;
-                        dbRef[tKey][ent] = pVal;
-                    });
-                }
-
-                window.syncCloudStorage();
-                initSystem();
-                alert("Spreadsheet synchronized and uploaded to cloud successfully!");
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            switchTab('out');
-        });
+        window.onload = function() {
+            initSystem();
+        };
     </script>
 </body>
 </html>
