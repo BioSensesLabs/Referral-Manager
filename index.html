@@ -889,7 +889,7 @@
                     <td class="px-4 py-2.5 text-center" onclick="event.stopPropagation()">
                         <button onclick="deleteTestRecord('${key}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 transition">✕</button>
                     </td>
-                </tr>`;
+                `;
             });
 
             if (counter === 0) {
@@ -1222,12 +1222,132 @@
             XLSX.writeFile(workbook, `BioSenses_${window.activeTab.toUpperCase()}_Report_${scope === 'single' ? selectedLab : 'Matrix'}.xlsx`);
         }
 
+        // --- Table-Only HTML Generator for Word & PDF Exports ---
+        function generateExportTableHTML(scope, selectedLab) {
+            const currentEnts = getCurrentEntities();
+            const currentDb = getCurrentDatabase();
+            const currentMeta = getCurrentMeta();
+            const searchVal = (document.getElementById('searchInput')?.value || '').toLowerCase();
+            const catFilter = document.getElementById('categoryFilterSelect')?.value || 'ALL';
+
+            let title = `BioSenses ${window.activeTab === 'in' ? 'Referral In' : 'Referral Out'} Pricing Report`;
+            if (scope === 'single') {
+                title += ` - ${selectedLab}`;
+            } else {
+                title += ` - Full Matrix`;
+            }
+
+            let html = `
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                    <h2 style="margin-bottom: 5px; color: #1e293b;">${title}</h2>
+                    <p style="font-size: 11px; color: #64748b; margin-bottom: 20px;">Generated on: ${new Date().toLocaleString()}</p>
+                    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 11px; text-align: left;">
+                        <thead>
+                            <tr style="background-color: #f1f5f9; color: #334155;">
+                                <th style="width: 40px; text-align: center;">#</th>
+                                <th>Test Name</th>
+            `;
+
+            if (window.activeTab === 'in') {
+                html += `<th>Category</th>`;
+            }
+            html += `<th>Sample</th><th>TAT</th>`;
+
+            if (scope === 'single') {
+                html += `<th style="text-align: right;">${selectedLab}</th>`;
+            } else {
+                currentEnts.forEach(ent => {
+                    html += `<th style="text-align: right;">${ent}</th>`;
+                });
+            }
+            html += `</tr></thead><tbody>`;
+
+            let testKeys = Object.keys(currentDb).sort();
+            let counter = 0;
+
+            testKeys.forEach(key => {
+                let testName = key.replace(/-/g, '.');
+                let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
+                let category = window.activeTab === 'in' ? (window.inCategories[key] || 'General Chemistry') : '';
+
+                if (searchVal && !testName.toLowerCase().includes(searchVal)) return;
+                if (window.activeTab === 'in' && catFilter !== 'ALL' && category !== catFilter) return;
+
+                counter++;
+                html += `<tr>`;
+                html += `<td style="text-align: center; color: #64748b;">${counter}</td>`;
+                html += `<td style="font-weight: bold;">${testName}</td>`;
+
+                if (window.activeTab === 'in') {
+                    html += `<td>${category}</td>`;
+                }
+                html += `<td>${meta.sample || 'Serum'}</td>`;
+                html += `<td>${meta.tat || 'Daily'}</td>`;
+
+                if (scope === 'single') {
+                    let priceVal = currentDb[key][selectedLab] !== undefined ? currentDb[key][selectedLab] : '';
+                    html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                } else {
+                    currentEnts.forEach(ent => {
+                        let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
+                        html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                    });
+                }
+                html += `</tr>`;
+            });
+
+            if (counter === 0) {
+                let colSpan = (scope === 'single' ? 1 : currentEnts.length) + (window.activeTab === 'in' ? 5 : 4);
+                html += `<tr><td colspan="${colSpan}" style="text-align: center; color: #94a3b8; padding: 20px;">No matching records found.</td></tr>`;
+            }
+
+            html += `</tbody></table></div>`;
+            return html;
+        }
+
         function exportToWord(scope, selectedLab) {
-            alert("Word export format triggered. Document generation in progress.");
+            const tableHTML = generateExportTableHTML(scope, selectedLab);
+            const blob = new Blob(['\ufeff' + tableHTML], {
+                type: 'application/msword'
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `BioSenses_${window.activeTab.toUpperCase()}_Report_${scope === 'single' ? selectedLab : 'Matrix'}.doc`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         function exportToPDF(scope, selectedLab) {
-            window.print();
+            const tableHTML = generateExportTableHTML(scope, selectedLab);
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>BioSenses Pricing Report</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                        th, td { border: 1px solid #cbd5e1; padding: 8px 12px; font-size: 11px; }
+                        th { background-color: #f1f5f9; color: #334155; text-align: left; }
+                        td { color: #334155; }
+                    </style>
+                </head>
+                <body>
+                    ${tableHTML}
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                            window.close();
+                        };
+                    <\/script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
         }
 
         window.onload = function() {
