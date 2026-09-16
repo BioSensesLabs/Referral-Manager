@@ -281,7 +281,7 @@
             </div>
         </div>
 
-        <!-- Referral Out Calculator Section (Standalone Addition) -->
+        <!-- Referral Out Calculator Section -->
         <div id="referralOutCalculatorSection" class="bg-white p-6 rounded-xl border border-indigo-100 shadow-md space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div>
@@ -824,6 +824,11 @@
             container.innerHTML = html;
         }
 
+        function toggleCategoryCollapse(categoryName) {
+            window.collapsedCategories[categoryName] = !window.collapsedCategories[categoryName];
+            renderTable();
+        }
+
         function renderTable() {
             const header = document.getElementById('tableHeader');
             const body = document.getElementById('tableBody');
@@ -857,40 +862,95 @@
             let rowsHtml = '';
             let counter = 0;
 
-            testKeys.forEach(key => {
-                let testName = key.replace(/-/g, '.');
-                let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
-                let category = window.activeTab === 'in' ? (window.inCategories[key] || 'General Chemistry') : '';
+            if (window.activeTab === 'in') {
+                let categoriesToDisplay = catFilter === 'ALL' ? (window.inCategoryList || []) : [catFilter];
+                let totalColSpan = currentEnts.length + 6;
 
-                if (searchVal && !testName.toLowerCase().includes(searchVal)) return;
-                if (window.activeTab === 'in' && catFilter !== 'ALL' && category !== catFilter) return;
+                categoriesToDisplay.forEach(category => {
+                    let catTests = testKeys.filter(key => {
+                        let testName = key.replace(/-/g, '.');
+                        let cat = window.inCategories[key] || 'General Chemistry';
+                        if(cat !== category) return false;
+                        if(searchVal && !testName.toLowerCase().includes(searchVal)) return false;
+                        return true;
+                    }).sort();
 
-                counter++;
-                let isSelected = window.currentEditingRow === key;
+                    if(catTests.length === 0 && catFilter !== 'ALL') return;
 
-                rowsHtml += `<tr onclick="loadTestIntoForm('${key}')" class="hover:bg-indigo-50/40 cursor-pointer transition ${isSelected ? 'selected-row' : ''}">
-                    <td class="px-4 py-2.5 text-center font-mono text-[10px] text-slate-400">${counter}</td>
-                    <td class="px-4 py-2.5 font-bold text-slate-800">${testName}</td>`;
+                    let isCollapsed = !!window.collapsedCategories[category];
 
-                if (window.activeTab === 'in') {
-                    rowsHtml += `<td class="px-4 py-2.5 font-medium text-indigo-600">${category}</td>`;
-                }
+                    // Category Header Row
+                    rowsHtml += `
+                        <tr onclick="toggleCategoryCollapse('${category}')" class="bg-indigo-100/70 hover:bg-indigo-200/70 cursor-pointer font-bold text-indigo-900 border-t-2 border-indigo-200">
+                            <td colspan="${totalColSpan}" class="px-4 py-2.5 flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span>${isCollapsed ? '▶' : '▼'}</span>
+                                    <span class="text-xs uppercase tracking-wider">📁 ${category}</span>
+                                    <span class="text-[10px] font-normal text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full ml-2">(${catTests.length} tests)</span>
+                                </div>
+                                <span class="text-[10px] font-normal text-slate-500">${isCollapsed ? 'Click to expand' : 'Click to collapse'}</span>
+                            </td>
+                        </tr>
+                    `;
 
-                rowsHtml += `
-                    <td class="px-4 py-2.5 text-slate-500">${meta.sample || 'Serum'}</td>
-                    <td class="px-4 py-2.5 text-slate-500">${meta.tat || 'Daily'}</td>`;
+                    if(!isCollapsed) {
+                        catTests.forEach(key => {
+                            let testName = key.replace(/-/g, '.');
+                            let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
+                            let categoryVal = window.inCategories[key] || 'General Chemistry';
 
-                currentEnts.forEach(ent => {
-                    let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
-                    rowsHtml += `<td class="px-4 py-2.5 text-right font-mono font-medium text-slate-700">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                            counter++;
+                            let isSelected = window.currentEditingRow === key;
+
+                            rowsHtml += `<tr onclick="loadTestIntoForm('${key}')" class="hover:bg-indigo-50/40 cursor-pointer transition ${isSelected ? 'selected-row' : ''}">
+                                <td class="px-4 py-2.5 text-center font-mono text-[10px] text-slate-400">${counter}</td>
+                                <td class="px-4 py-2.5 font-bold text-slate-800">${testName}</td>
+                                <td class="px-4 py-2.5 font-medium text-indigo-600">${categoryVal}</td>
+                                <td class="px-4 py-2.5 text-slate-500">${meta.sample || 'Serum'}</td>
+                                <td class="px-4 py-2.5 text-slate-500">${meta.tat || 'Daily'}</td>`;
+
+                            currentEnts.forEach(ent => {
+                                let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
+                                rowsHtml += `<td class="px-4 py-2.5 text-right font-mono font-medium text-slate-700">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                            });
+
+                            rowsHtml += `
+                                <td class="px-4 py-2.5 text-center" onclick="event.stopPropagation()">
+                                    <button onclick="deleteTestRecord('${key}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 transition">✕</button>
+                                </td>
+                            </tr>`;
+                        });
+                    }
                 });
 
-                rowsHtml += `
-                    <td class="px-4 py-2.5 text-center" onclick="event.stopPropagation()">
-                        <button onclick="deleteTestRecord('${key}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 transition">✕</button>
-                    </td>
-                `;
-            });
+            } else {
+                testKeys.forEach(key => {
+                    let testName = key.replace(/-/g, '.');
+                    let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
+
+                    if (searchVal && !testName.toLowerCase().includes(searchVal)) return;
+
+                    counter++;
+                    let isSelected = window.currentEditingRow === key;
+
+                    rowsHtml += `<tr onclick="loadTestIntoForm('${key}')" class="hover:bg-indigo-50/40 cursor-pointer transition ${isSelected ? 'selected-row' : ''}">
+                        <td class="px-4 py-2.5 text-center font-mono text-[10px] text-slate-400">${counter}</td>
+                        <td class="px-4 py-2.5 font-bold text-slate-800">${testName}</td>
+                        <td class="px-4 py-2.5 text-slate-500">${meta.sample || 'Serum'}</td>
+                        <td class="px-4 py-2.5 text-slate-500">${meta.tat || 'Daily'}</td>`;
+
+                    currentEnts.forEach(ent => {
+                        let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
+                        rowsHtml += `<td class="px-4 py-2.5 text-right font-mono font-medium text-slate-700">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                    });
+
+                    rowsHtml += `
+                        <td class="px-4 py-2.5 text-center" onclick="event.stopPropagation()">
+                            <button onclick="deleteTestRecord('${key}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 transition">✕</button>
+                        </td>
+                    </tr>`;
+                });
+            }
 
             if (counter === 0) {
                 let colSpan = currentEnts.length + (window.activeTab === 'in' ? 6 : 5);
@@ -1165,29 +1225,36 @@
             let rows = [];
 
             if(window.activeTab === 'in') {
+                let categories = window.inCategoryList || [];
                 if(scope === 'single') {
                     rows.push(['#', 'Test Name', 'Category', 'Sample', 'TAT', selectedLab]);
                     let idx = 1;
-                    Object.keys(currentDb).sort().forEach(key => {
-                        let testName = key.replace(/-/g, '.');
-                        let meta = currentMeta[key] || {};
-                        let cat = window.inCategories[key] || 'General Chemistry';
-                        let price = currentDb[key][selectedLab] !== undefined ? currentDb[key][selectedLab] : '';
-                        rows.push([idx++, testName, cat, meta.sample || 'Serum', meta.tat || 'Daily', price]);
+                    categories.forEach(category => {
+                        rows.push([`CATEGORY: ${category}`]);
+                        let catTests = Object.keys(currentDb).filter(key => (window.inCategories[key] || 'General Chemistry') === category).sort();
+                        catTests.forEach(key => {
+                            let testName = key.replace(/-/g, '.');
+                            let meta = currentMeta[key] || {};
+                            let price = currentDb[key][selectedLab] !== undefined ? currentDb[key][selectedLab] : '';
+                            rows.push([idx++, testName, category, meta.sample || 'Serum', meta.tat || 'Daily', price]);
+                        });
                     });
                 } else {
                     let header = ['#', 'Test Name', 'Category', 'Sample', 'TAT', ...currentEnts];
                     rows.push(header);
                     let idx = 1;
-                    Object.keys(currentDb).sort().forEach(key => {
-                        let testName = key.replace(/-/g, '.');
-                        let meta = currentMeta[key] || {};
-                        let cat = window.inCategories[key] || 'General Chemistry';
-                        let rowData = [idx++, testName, cat, meta.sample || 'Serum', meta.tat || 'Daily'];
-                        currentEnts.forEach(ent => {
-                            rowData.push(currentDb[key][ent] !== undefined ? currentDb[key][ent] : '');
+                    categories.forEach(category => {
+                        rows.push([`CATEGORY: ${category}`]);
+                        let catTests = Object.keys(currentDb).filter(key => (window.inCategories[key] || 'General Chemistry') === category).sort();
+                        catTests.forEach(key => {
+                            let testName = key.replace(/-/g, '.');
+                            let meta = currentMeta[key] || {};
+                            let rowData = [idx++, testName, category, meta.sample || 'Serum', meta.tat || 'Daily'];
+                            currentEnts.forEach(ent => {
+                                rowData.push(currentDb[key][ent] !== undefined ? currentDb[key][ent] : '');
+                            });
+                            rows.push(rowData);
                         });
-                        rows.push(rowData);
                     });
                 }
             } else {
@@ -1222,7 +1289,7 @@
             XLSX.writeFile(workbook, `BioSenses_${window.activeTab.toUpperCase()}_Report_${scope === 'single' ? selectedLab : 'Matrix'}.xlsx`);
         }
 
-        // --- Table-Only HTML Generator for Word & PDF Exports ---
+        // --- Categorized HTML Generator for Word & PDF Exports ---
         function generateExportTableHTML(scope, selectedLab) {
             const currentEnts = getCurrentEntities();
             const currentDb = getCurrentDatabase();
@@ -1265,36 +1332,80 @@
             let testKeys = Object.keys(currentDb).sort();
             let counter = 0;
 
-            testKeys.forEach(key => {
-                let testName = key.replace(/-/g, '.');
-                let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
-                let category = window.activeTab === 'in' ? (window.inCategories[key] || 'General Chemistry') : '';
+            if (window.activeTab === 'in') {
+                let categoriesToDisplay = catFilter === 'ALL' ? (window.inCategoryList || []) : [catFilter];
+                let totalColSpan = (scope === 'single' ? 1 : currentEnts.length) + 5;
 
-                if (searchVal && !testName.toLowerCase().includes(searchVal)) return;
-                if (window.activeTab === 'in' && catFilter !== 'ALL' && category !== catFilter) return;
+                categoriesToDisplay.forEach(category => {
+                    let catTests = testKeys.filter(key => {
+                        let testName = key.replace(/-/g, '.');
+                        let cat = window.inCategories[key] || 'General Chemistry';
+                        if(cat !== category) return false;
+                        if(searchVal && !testName.toLowerCase().includes(searchVal)) return false;
+                        return true;
+                    }).sort();
 
-                counter++;
-                html += `<tr>`;
-                html += `<td style="text-align: center; color: #64748b;">${counter}</td>`;
-                html += `<td style="font-weight: bold;">${testName}</td>`;
+                    if(catTests.length === 0 && catFilter !== 'ALL') return;
 
-                if (window.activeTab === 'in') {
-                    html += `<td>${category}</td>`;
-                }
-                html += `<td>${meta.sample || 'Serum'}</td>`;
-                html += `<td>${meta.tat || 'Daily'}</td>`;
+                    // Category Header Row in Export
+                    html += `
+                        <tr style="background-color: #e2e8f0; font-weight: bold; color: #1e293b;">
+                            <td colspan="${totalColSpan}" style="padding: 10px; font-size: 12px;">📁 ${category} (${catTests.length} tests)</td>
+                        </tr>
+                    `;
 
-                if (scope === 'single') {
-                    let priceVal = currentDb[key][selectedLab] !== undefined ? currentDb[key][selectedLab] : '';
-                    html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
-                } else {
-                    currentEnts.forEach(ent => {
-                        let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
-                        html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                    catTests.forEach(key => {
+                        let testName = key.replace(/-/g, '.');
+                        let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
+                        let categoryVal = window.inCategories[key] || 'General Chemistry';
+
+                        counter++;
+                        html += `<tr>`;
+                        html += `<td style="text-align: center; color: #64748b;">${counter}</td>`;
+                        html += `<td style="font-weight: bold;">${testName}</td>`;
+                        html += `<td>${categoryVal}</td>`;
+                        html += `<td>${meta.sample || 'Serum'}</td>`;
+                        html += `<td>${meta.tat || 'Daily'}</td>`;
+
+                        if (scope === 'single') {
+                            let priceVal = currentDb[key][selectedLab] !== undefined ? currentDb[key][selectedLab] : '';
+                            html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                        } else {
+                            currentEnts.forEach(ent => {
+                                let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
+                                html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                            });
+                        }
+                        html += `</tr>`;
                     });
-                }
-                html += `</tr>`;
-            });
+                });
+
+            } else {
+                testKeys.forEach(key => {
+                    let testName = key.replace(/-/g, '.');
+                    let meta = currentMeta[key] || { sample: 'Serum', tat: 'Daily' };
+
+                    if (searchVal && !testName.toLowerCase().includes(searchVal)) return;
+
+                    counter++;
+                    html += `<tr>`;
+                    html += `<td style="text-align: center; color: #64748b;">${counter}</td>`;
+                    html += `<td style="font-weight: bold;">${testName}</td>`;
+                    html += `<td>${meta.sample || 'Serum'}</td>`;
+                    html += `<td>${meta.tat || 'Daily'}</td>`;
+
+                    if (scope === 'single') {
+                        let priceVal = currentDb[key][selectedLab] !== undefined ? currentDb[key][selectedLab] : '';
+                        html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                    } else {
+                        currentEnts.forEach(ent => {
+                            let priceVal = currentDb[key][ent] !== undefined ? currentDb[key][ent] : '';
+                            html += `<td style="text-align: right; font-family: monospace;">${priceVal !== '' ? parseFloat(priceVal).toFixed(2) : '-'}</td>`;
+                        });
+                    }
+                    html += `</tr>`;
+                });
+            }
 
             if (counter === 0) {
                 let colSpan = (scope === 'single' ? 1 : currentEnts.length) + (window.activeTab === 'in' ? 5 : 4);
